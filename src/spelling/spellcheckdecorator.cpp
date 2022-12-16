@@ -1,62 +1,67 @@
-/***********************************************************************
+/*
+ * SPDX-FileCopyrightText: 2022 Megan Conkle <megan.conkle@kdemail.net>
+ * SPDX-FileCopyrightText: 2006 Jacob R Rideout <kde@jacobrideout.net>
+   SPDX-FileCopyrightText: 2006 Martin Sandsmark <martin.sandsmark@kde.org>
  *
- * Copyright (C) 2022 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #include <QAction>
 #include <QContextMenuEvent>
+#include <QList>
 #include <QMenu>
 #include <QStringList>
+#include <QStringRef>
+#include <QTextBlock>
+#include <QTextBoundaryFinder> 
 #include <QTextCharFormat>
 #include <QTextCursor>
 #include <QTextLayout>
 #include <QTimer>
 #include <QVector>
 
-#include "spellcheckdecorator.h"
+#include <Sonnet/BackgroundChecker>
+#include <Sonnet/Dialog>
+#include <Sonnet/GuessLanguage>
+#include <Sonnet/Settings>
+#include <Sonnet/Speller>
 
-#include "dictionary.h"
-#include "dictionarymanager.h"
-#include "spellchecker.h"
+#include "spellcheckdecorator.h"
+#include "spellcheckdialog.h"
 
 namespace ghostwriter
 {
-
 class SpellCheckDecoratorPrivate
 {
     Q_DECLARE_PUBLIC(SpellCheckDecorator)
 
 public:
+    struct Position {
+        int start, length;
+    };
+
+    /**
+     * This structure abstracts the positions of breaks in the test. As per the
+     * unicode annex, both the start and end of the text are returned.
+     */
+    typedef QList<Position> Positions;
+
     SpellCheckDecoratorPrivate(SpellCheckDecorator *decorator)
-    : q_ptr(decorator),
-      spellCheckEnabled(true),
-      dictionary(DictionaryManager::instance()->requestDictionary())
+    : q_ptr(decorator)
     {
         ;
     }
     ~SpellCheckDecoratorPrivate() { }
 
+    static Sonnet::Settings *settings;
+
     SpellCheckDecorator *q_ptr;
     QPlainTextEdit *editor;
-    bool spellCheckEnabled;
-    Dictionary *dictionary;
+    Sonnet::Speller *speller;
     QColor errorColor;
+    SpellCheckDialog *spellCheckDialog;
 
-    QMenu * createContextMenu(const QTextCursor &cursorForWord) const;
+    QMenu * createContextMenu();
 
     QMenu * createSpellingMenu(
         const QString &misspelledWord,
@@ -67,9 +72,12 @@ public:
     void onContentsChanged(int position, int charsAdded, int charsRemoved);
     void spellCheckBlock(QTextBlock &block) const;
     void clearSpellCheckFormatting(QTextBlock &block) const;
-    void resetLiveSpellChecking() const;
+    Positions wordBreaks(const QString &text) const;
+    Positions sentenceBreaks(const QString &text) const;
 
 };
+
+Sonnet::Settings *SpellCheckDecoratorPrivate::settings = nullptr;
 
 SpellCheckDecorator::SpellCheckDecorator(QPlainTextEdit *editor)
 : QObject(editor),
@@ -77,7 +85,10 @@ SpellCheckDecorator::SpellCheckDecorator(QPlainTextEdit *editor)
 {
     Q_D(SpellCheckDecorator);
 
-    d->spellCheckEnabled = true;
+    if (nullptr == d->settings) {
+        d->settings = new Sonnet::Settings();
+    }
+    
     d->editor = editor;
 
     Q_ASSERT(nullptr != d->editor);
@@ -92,18 +103,13 @@ SpellCheckDecorator::SpellCheckDecorator(QPlainTextEdit *editor)
             d->onContentsChanged(position, charsAdded, charsRemoved);
         }
     );
+
+    d->speller = new Sonnet::Speller();
 }
 
 SpellCheckDecorator::~SpellCheckDecorator()
 {
-    ;
-}
-
-bool SpellCheckDecorator::liveSpellCheckEnabled() const
-{
-    Q_D(const SpellCheckDecorator);
-
-    return d->spellCheckEnabled;
+    delete d_ptr->speller;
 }
 
 QColor SpellCheckDecorator::errorColor() const
@@ -113,47 +119,32 @@ QColor SpellCheckDecorator::errorColor() const
     return d->errorColor;
 }
 
-void SpellCheckDecorator::setLiveSpellCheckEnabled(bool enabled)
-{
-    Q_D(SpellCheckDecorator);
-
-    if (d->spellCheckEnabled != enabled) {
-        d->spellCheckEnabled = enabled;
-        d->resetLiveSpellChecking();
-    }
-}
-
-void SpellCheckDecorator::setDictionary(const QString &language)
-{
-    Q_D(SpellCheckDecorator);
-
-    d->dictionary = DictionaryManager::instance()->requestDictionary(language);
-}
-
 void SpellCheckDecorator::setErrorColor(const QColor &color)
 {
     Q_D(SpellCheckDecorator);
 
     d->errorColor = color;
-    d->resetLiveSpellChecking();
+    this->rehighlight();
 }
 
-void SpellCheckDecorator::runSpellCheck()
+void SpellCheckDecorator::settingsChanged()
 {
     Q_D(SpellCheckDecorator);
 
-    SpellChecker::checkDocument(d->editor, d->dictionary);
-
-    if (d->spellCheckEnabled) {
-        d->resetLiveSpellChecking();
+    if (d->settings) {
+        delete d->settings;
+        d->settings = new Sonnet::Settings(this);
     }
+
+    d->speller->setLanguage(d->settings->defaultLanguage());
+    this->rehighlight();
 }
 
 void SpellCheckDecorator::startLiveSpellCheck()
 {
     Q_D(SpellCheckDecorator);
 
-    if (!d->spellCheckEnabled) {
+    if (!d->settings->checkerEnabledByDefault()) {
         return;
     }
 
@@ -165,13 +156,30 @@ void SpellCheckDecorator::startLiveSpellCheck()
     }
 }
 
+void SpellCheckDecorator::rehighlight() const
+{
+    Q_D(const SpellCheckDecorator);
+
+    QTextBlock block = d->editor->document()->begin();
+
+    while (block.isValid()) {
+        d->clearSpellCheckFormatting(block);
+
+        if (d->settings->checkerEnabledByDefault()) {
+            d->spellCheckBlock(block);
+        }
+
+        block = block.next();
+    }
+}
+
 bool SpellCheckDecorator::eventFilter(QObject *watched, QEvent *event)
 {
     Q_D(SpellCheckDecorator);
     Q_UNUSED(watched);
 
     if ((event->type() != QEvent::ContextMenu)
-            || !d->spellCheckEnabled
+            || !d->settings->checkerEnabledByDefault()
             || d->editor->isReadOnly()) {
         return false;
     }
@@ -193,7 +201,7 @@ bool SpellCheckDecorator::eventFilter(QObject *watched, QEvent *event)
         cursorForWord = d->editor->cursorForPosition(contextEvent->pos());
     }
 
-    QMenu *popupMenu = d->createContextMenu(cursorForWord);
+    QMenu *popupMenu = d->createContextMenu();
     QString misspelledWord = d->getMisspelledWordAtCursor(cursorForWord);
 
     // If the selected word is spelled correctly, use the default processing for
@@ -228,24 +236,29 @@ bool SpellCheckDecorator::eventFilter(QObject *watched, QEvent *event)
     return true;
 }
 
-QMenu * SpellCheckDecoratorPrivate::createContextMenu(
-    const QTextCursor &cursorForWord) const
+QMenu * SpellCheckDecoratorPrivate::createContextMenu()
 {
-    Q_Q(const SpellCheckDecorator);
+    Q_Q(SpellCheckDecorator);
 
     // Add spell check action to the standard context menu that comes with
     // the editor.
     QMenu *popupMenu = this->editor->createStandardContextMenu();
 
     QAction *checkSpellingAction =
-        new QAction(q->tr("Check spelling..."), popupMenu);
+        new QAction(SpellCheckDecorator::tr("Check spelling..."), popupMenu);
 
     q->connect(checkSpellingAction,
         &QAction::triggered,
         q,
-        [this, cursorForWord]() {
-            this->editor->setTextCursor(cursorForWord);
-            SpellChecker::checkDocument(this->editor, this->dictionary);
+        [this, q]() {
+            spellCheckDialog = new SpellCheckDialog(this->editor);
+            q->connect(
+                spellCheckDialog,
+                &SpellCheckDialog::finished,
+                q,
+                &SpellCheckDecorator::rehighlight
+            );
+            spellCheckDialog->show();
         }
     );
 
@@ -258,22 +271,41 @@ QMenu * SpellCheckDecoratorPrivate::createSpellingMenu(
     const QString &misspelledWord,
     const QTextCursor &cursorForWord) const
 {
-    Q_Q(const SpellCheckDecorator);
 
-    QMenu *spellingMenu = new QMenu(q->tr("Spelling"));
-    QStringList suggestions = this->dictionary->suggestions(misspelledWord);
+    Q_Q(const SpellCheckDecorator);
+    QMenu *spellingMenu = new QMenu(SpellCheckDecorator::tr("Spelling"));
+
+    if (this->settings->autodetectLanguage())  {
+        QString text = cursorForWord.block().text();
+        int pos = cursorForWord.position() - cursorForWord.block().position();
+
+        for (auto sentenceBreak : sentenceBreaks(text)) {
+            if (pos < (sentenceBreak.start + sentenceBreak.length)) {
+                QString sentence = text.mid(
+                    sentenceBreak.start,
+                    sentenceBreak.length);
+                QString language = Sonnet::GuessLanguage().identify(sentence);
+
+                if (!language.isNull()) {
+                    this->speller->setLanguage(language);
+                }
+
+                break;
+            }
+        }
+    }
+
+    QStringList suggestions = this->speller->suggest(misspelledWord);
 
     QAction *addWordToDictionaryAction =
-        new QAction(q->tr("Add word to dictionary"), spellingMenu);
+        new QAction(SpellCheckDecorator::tr("Add word to dictionary"), spellingMenu);
 
     q->connect(addWordToDictionaryAction,
         &QAction::triggered,
-        q,
-        [this, cursorForWord, misspelledWord]() {
+        [this, q, cursorForWord, misspelledWord]() {
             this->editor->setTextCursor(cursorForWord);
-            this->dictionary->addToPersonal(misspelledWord);
-
-            resetLiveSpellChecking();
+            this->speller->addToPersonal(misspelledWord);
+            q->rehighlight();
         }
     );
 
@@ -305,7 +337,7 @@ QMenu * SpellCheckDecoratorPrivate::createSpellingMenu(
         }
     } else {
         QAction *noSuggestionsAction =
-            new QAction(q->tr("No spelling suggestions found"), spellingMenu);
+            new QAction(SpellCheckDecorator::tr("No spelling suggestions found"), spellingMenu);
         noSuggestionsAction->setEnabled(false);
         spellingMenu->addAction(noSuggestionsAction);
     }
@@ -363,7 +395,7 @@ void SpellCheckDecoratorPrivate::onContentsChanged(
     int charsAdded,
     int charsRemoved)
 {
-    if (!this->spellCheckEnabled) {
+    if (!this->settings->checkerEnabledByDefault()) {
         return;
     }
 
@@ -393,27 +425,41 @@ void SpellCheckDecoratorPrivate::onContentsChanged(
 
 void SpellCheckDecoratorPrivate::spellCheckBlock(QTextBlock &block) const
 {
-    QStringRef misspelledWord = dictionary->check(block.text(), 0);
+    QString text = block.text();
 
-    while (!misspelledWord.isNull()) {
-        int startIndex = misspelledWord.position();
-        int length = misspelledWord.length();
+    for (auto sentenceSegment : sentenceBreaks(text)) {
+        QString sentence =
+            text.mid(sentenceSegment.start, sentenceSegment.length);
 
-        QTextCharFormat spellingErrorFormat;
-        spellingErrorFormat.setUnderlineColor(this->errorColor);
-        spellingErrorFormat.setUnderlineStyle(QTextCharFormat::SpellCheckUnderline);
+        if (this->settings->autodetectLanguage()) {
+            QString language = Sonnet::GuessLanguage().identify(sentence);
 
-        QTextLayout::FormatRange range;
-        range.start = startIndex;
-        range.length = length;
-        range.format = spellingErrorFormat;
+            if (!language.isNull()) {
+                this->speller->setLanguage(language);
+            } else {
+                this->speller->setLanguage(this->settings->defaultLanguage());
+            }
+        }
 
-        auto formats = block.layout()->formats();
-        formats.append(range);
-        block.layout()->setFormats(formats);
+        for (auto wordSegment : wordBreaks(sentence)) {
+            int wordStart = sentenceSegment.start + wordSegment.start;
+            QString word = text.mid(wordStart, wordSegment.length);
 
-        startIndex += length;
-        misspelledWord = dictionary->check(block.text(), startIndex);
+            if (speller->isMisspelled(word)) {
+                QTextCharFormat spellingErrorFormat;
+                spellingErrorFormat.setUnderlineColor(this->errorColor);
+                spellingErrorFormat.setUnderlineStyle(QTextCharFormat::SpellCheckUnderline);
+
+                QTextLayout::FormatRange range;
+                range.start = wordStart;
+                range.length = wordSegment.length;
+                range.format = spellingErrorFormat;
+
+                auto formats = block.layout()->formats();
+                formats.append(range);
+                block.layout()->setFormats(formats);
+            }
+        }
     }
 }
 
@@ -430,19 +476,72 @@ void SpellCheckDecoratorPrivate::clearSpellCheckFormatting(QTextBlock &block) co
     block.layout()->setFormats(formats);
 }
 
-void SpellCheckDecoratorPrivate::resetLiveSpellChecking() const
+// Code is lifted from KDE Frameworks' Sonnet library, because we know it
+// just works.  :)
+SpellCheckDecoratorPrivate::Positions SpellCheckDecoratorPrivate::wordBreaks(const QString &text) const
 {
-    QTextBlock block = editor->document()->begin();
+    Positions breaks;
 
-    while (block.isValid()) {
-        clearSpellCheckFormatting(block);
+    if (text.isEmpty()) {
+        return breaks;
+    }
 
-        if (spellCheckEnabled) {
-            spellCheckBlock(block);
+    QTextBoundaryFinder boundaryFinder(QTextBoundaryFinder::Word, text);
+
+    while (boundaryFinder.position() < text.length()) {
+        if (!(boundaryFinder.boundaryReasons().testFlag(QTextBoundaryFinder::StartOfItem))) {
+            if (boundaryFinder.toNextBoundary() == -1) {
+                break;
+            }
+            continue;
         }
 
-        block = block.next();
+        Position pos;
+        pos.start = boundaryFinder.position();
+        int end = boundaryFinder.toNextBoundary();
+        if (end == -1) {
+            break;
+        }
+        pos.length = end - pos.start;
+        if (pos.length < 1) {
+            continue;
+        }
+        breaks.append(pos);
+
+        if (boundaryFinder.toNextBoundary() == -1) {
+            break;
+        }
     }
+    return breaks;
+}
+
+// Code is lifted from KDE Frameworks' Sonnet library, because we know it
+// just works.  :)
+SpellCheckDecoratorPrivate::Positions
+SpellCheckDecoratorPrivate::sentenceBreaks(const QString &text) const
+{
+    Positions breaks;
+
+    if (text.isEmpty()) {
+        return breaks;
+    }
+
+    QTextBoundaryFinder boundaryFinder(QTextBoundaryFinder::Sentence, text);
+
+    while (boundaryFinder.position() < text.length()) {
+        Position pos;
+        pos.start = boundaryFinder.position();
+        int end = boundaryFinder.toNextBoundary();
+        if (end == -1) {
+            break;
+        }
+        pos.length = end - pos.start;
+        if (pos.length < 1) {
+            continue;
+        }
+        breaks.append(pos);
+    }
+    return breaks;
 }
 
 } // namespace ghostwriter

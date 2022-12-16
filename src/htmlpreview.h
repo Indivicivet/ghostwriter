@@ -1,21 +1,8 @@
-/***********************************************************************
+/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2014-2022 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #ifndef HTML_PREVIEW_H
 #define HTML_PREVIEW_H
@@ -53,7 +40,7 @@ public:
     (
         MarkdownDocument *document,
         Exporter *exporter,
-        QWidget *parent = 0
+        QWidget *parent = nullptr
     );
 
     /**
@@ -64,7 +51,7 @@ public:
     /**
      * Customize QtWebEngine context menu.
      */
-    void contextMenuEvent(QContextMenuEvent *event);
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 public slots:
     /**
@@ -92,8 +79,13 @@ public slots:
      */
     void setStyleSheet(const QString &css);
 
+    /**
+     * Call this method to enable or disable math rendering.
+     */
+    void setMathEnabled(bool enabled);
+
 protected:
-    void closeEvent(QCloseEvent *event);
+    void closeEvent(QCloseEvent *event) override;
 
 private:
     QScopedPointer<HtmlPreviewPrivate> d_ptr;

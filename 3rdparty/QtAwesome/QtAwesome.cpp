@@ -1,4 +1,4 @@
-/**
+﻿/**
  * QtAwesome - use font-awesome (or other font icons) in your c++ / Qt Application
  *
  * MIT Licensed
@@ -67,7 +67,7 @@ protected:
 
     QVariant optionValueForModeAndState( const QString& baseKey, QIcon::Mode mode, QIcon::State state, const QVariantMap& options )
     {
-        foreach( QString key, optionKeysForModeAndState(baseKey, mode, state) ) {
+        for (QString key : optionKeysForModeAndState(baseKey, mode, state)) {
             //if ( options.contains(key) && options.value(key).toString().isEmpty()) qDebug() << "Not found:" << key;
             if( options.contains(key) && !(options.value(key).toString().isEmpty()) )
                 return options.value(key);
@@ -231,7 +231,6 @@ QtAwesome::QtAwesome( QObject* parent )
     _fontIconPainter = new QtAwesomeCharIconPainter();
 
     _fontDetails.insert(style::stfas, FontData(FAS_FONT_FILENAME, FAS_FONT_WEIGHT));
-    _fontDetails.insert(style::stfar, FontData(FAR_FONT_FILENAME, FAR_FONT_WEIGHT));
     _fontDetails.insert(style::stfab, FontData(FAB_FONT_FILENAME, FAB_FONT_WEIGHT));
 #ifdef FONT_AWESOME_PRO
     _fontDetails.insert(style::stfal, FontData(FAL_FONT_FILENAME, FAL_FONT_WEIGHT));
@@ -253,9 +252,6 @@ QtAwesome::~QtAwesome()
 #else
     if(_namedCodepoints.contains(style::stfas))
         delete _namedCodepoints[style::stfas];
-
-    if(_namedCodepoints.contains(style::stfar))
-        delete _namedCodepoints[style::stfar];
 #endif
 }
 
@@ -2375,8 +2371,9 @@ bool QtAwesome::initFontAwesome( )
         if( fd.fontId() < 0 ) {
             // load the font file
             QFile res(":/fonts/" + fd.fontFilename());
+            
             if(!res.open(QIODevice::ReadOnly)) {
-                qDebug() << "Font awesome font" << fd.fontFilename() << "could not be loaded!";
+                qCritical() << "Font awesome font" << fd.fontFilename() << "could not be loaded!";
                 errors = true;
                 continue;
             }
@@ -2391,7 +2388,7 @@ bool QtAwesome::initFontAwesome( )
         if( !loadedFontFamilies.empty() ) {
             fd.setFontFamily( loadedFontFamilies.at(0) );
         } else {
-            qDebug() << "Font awesome" << fd.fontFilename() << " font is empty?!";
+            qCritical() << "Font awesome" << fd.fontFilename() << " font is empty?!";
             fd.setFontId( -1 ); // restore the font-awesome id
             return false;
         }
@@ -2415,17 +2412,10 @@ bool QtAwesome::initFontAwesome( )
         commonMap->insert(faProIconArray[i].name, faProIconArray[i].icon);
     }
 
-    _namedCodepoints.insert(style::stfar, commonMap);
     _namedCodepoints.insert(style::stfas, commonMap);
     _namedCodepoints.insert(style::stfal, commonMap);
     _namedCodepoints.insert(style::stfad, commonMap);
 #else
-    QHash<QString, int> *farMap = new QHash<QString, int>();
-    for (unsigned i = 0; i < sizeof(faCommonIconArray)/sizeof(FANameIcon) && i < FREE_REGULAR_ICON_SIZE; ++i) {
-        farMap->insert(faCommonIconArray[i].name, faCommonIconArray[i].icon);
-    }
-    _namedCodepoints.insert(style::stfar, farMap);
-
     QHash<QString, int> *fasMap = new QHash<QString, int>();
     for (unsigned i = 0; i < sizeof(faCommonIconArray)/sizeof(FANameIcon); ++i) {
         fasMap->insert(faCommonIconArray[i].name, faCommonIconArray[i].icon);
@@ -2589,8 +2579,6 @@ int QtAwesome::stringToStyleEnum(const QString st) const
 {
     if(st == "fas")
         return style::stfas;
-    else if (st == "far")
-        return style::stfar;
     else if (st == "fab")
         return style::stfab;
 #ifdef FONT_AWESOME_PRO
@@ -2608,8 +2596,6 @@ const QString QtAwesome::styleEnumToString(int st) const
     switch(st){
     case style::stfab:
         return "fab";
-    case style::stfar:
-        return "far";
     case style::stfas:
         return "fas";
 #ifdef FONT_AWESOME_PRO

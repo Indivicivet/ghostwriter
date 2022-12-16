@@ -1,21 +1,8 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2014-2022 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #ifndef MARKDOWN_EDITOR_H
 #define MARKDOWN_EDITOR_H
@@ -47,7 +34,7 @@ public:
     (
         MarkdownDocument *textDocument,
         const ColorScheme &colors,
-        QWidget *parent = 0
+        QWidget *parent = nullptr
     );
 
     /**
@@ -66,7 +53,7 @@ public:
      * used to in prior versions.  This means that we cannot control the
      * cursor color via the "color" style sheet property.
      */
-    void paintEvent(QPaintEvent *event);
+    void paintEvent(QPaintEvent *event) override;
 
     /**
      * This editor has a preferred layout that is used to center the text
@@ -127,16 +114,33 @@ public:
      */
     void setupPaperMargins();
 
+    /**
+     * Implements virtual method to ensure IME windows are positioned correctly
+     * relative to the text cursor position, since painting the text cursor
+     * in the paintEvent() method displaces the IME window.
+     */
+    QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
+
+    /**
+     * Reimplement these to have the correct cursor width that we are manually
+     * painting (since QPlainTextEdit's cursor width is set to zero to hide it.)
+     */
+    QRect cursorRect(const QTextCursor &cursor) const;
+    QRect cursorRect() const;
+    int cursorWidth() const;
+
 protected:
-    void dragEnterEvent(QDragEnterEvent *e);
-    void dragMoveEvent(QDragMoveEvent *e);
-    void dragLeaveEvent(QDragLeaveEvent *e);
-    void dropEvent(QDropEvent *e);
-    void keyPressEvent(QKeyEvent *e);
-    void mouseDoubleClickEvent(QMouseEvent *e);
-    void mousePressEvent(QMouseEvent *e);
-    void mouseReleaseEvent(QMouseEvent *e);
-    void wheelEvent(QWheelEvent *e);
+    bool canInsertFromMimeData(const QMimeData *source) const override;
+    void dragEnterEvent(QDragEnterEvent *e) override;
+    void dragMoveEvent(QDragMoveEvent *e) override;
+    void dragLeaveEvent(QDragLeaveEvent *e) override;
+    void dropEvent(QDropEvent *e) override;
+    void insertFromMimeData(const QMimeData *source) override;
+    void keyPressEvent(QKeyEvent *e) override;
+    void mouseDoubleClickEvent(QMouseEvent *e) override;
+    void mousePressEvent(QMouseEvent *e) override;
+    void mouseReleaseEvent(QMouseEvent *e) override;
+    void wheelEvent(QWheelEvent *e) override;
 
 signals:
     /**
@@ -285,6 +289,12 @@ public slots:
      * as complete, checking them with an 'x'.
      */
     bool toggleTaskComplete();
+
+    /**
+     * Prompts the user for a file path of an image to insert as a
+     * Markdown image "link".
+     */
+    void insertImage();
 
     /**
      * Sets whether large heading sizes are enabled.

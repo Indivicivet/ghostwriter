@@ -1,24 +1,11 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2014-2022 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
-#ifndef MARKUPDOCUMENT_H
-#define MARKUPDOCUMENT_H
+#ifndef MARKDOWNDOCUMENT_H
+#define MARKDOWNDOCUMENT_H
 
 #include <QDateTime>
 #include <QScopedPointer>
@@ -32,7 +19,7 @@ namespace ghostwriter
 {
 /**
  * Text document that maintains timestamp, read-only state, and new vs.
- * saved status.
+ * saved status. 
  */
 class MarkdownDocumentPrivate;
 class MarkdownDocument : public QTextDocument
@@ -44,12 +31,12 @@ public:
     /**
      * Constructor.
      */
-    MarkdownDocument(QObject *parent = 0);
+    MarkdownDocument(QObject *parent = nullptr);
 
     /**
      * Constructor.
      */
-    MarkdownDocument(const QString &text, QObject *parent = 0);
+    MarkdownDocument(const QString &text, QObject *parent = nullptr);
 
     /**
      * Destructor.
@@ -105,7 +92,7 @@ public:
     /**
      * Overrides base class clear() method to send cleared() signal.
      */
-    void clear();
+    void clear() override;
 
 signals:
     /**
@@ -123,4 +110,4 @@ private:
 };
 } // namespace ghostwriter
 
-#endif // MARKUPDOCUMENT_H
+#endif // MARKDOWNDOCUMENT_H

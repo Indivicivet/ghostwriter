@@ -1,21 +1,8 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2020-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2020-2021 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #include <QApplication>
 #include <QGridLayout>
@@ -31,7 +18,7 @@
 #include <QTimer>
 
 #include "findreplace.h"
-#include "3rdparty/QtAwesome/QtAwesome.h"
+#include "../3rdparty/QtAwesome/QtAwesome.h"
 
 #define GW_FIND_REPLACE_MATCH_CASE "FindReplace/matchCase"
 #define GW_FIND_REPLACE_WHOLE_WORD "FindReplace/wholeWord"
@@ -102,39 +89,25 @@ FindReplace::FindReplace(QPlainTextEdit *editor, QWidget *parent)
 
     QSettings settings;
 
-    d->matchCaseButton = new QPushButton("Aa");
-    QFont buttonFont = d->matchCaseButton->font();
-    buttonFont.setBold(true);
+    d->matchCaseButton = new QPushButton("Aa", this);
+    d->matchCaseButton->setObjectName("matchCaseButton");
 
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
-    int width = QFontMetrics(buttonFont).horizontalAdvance("@@@");
-#else
-    int width = QFontMetrics(buttonFont).boundingRect("@@@").width();
-#endif
-
-    d->matchCaseButton->setFixedWidth(width);
-    d->matchCaseButton->setFont(buttonFont);
     d->matchCaseButton->setCheckable(true);
     d->matchCaseButton->setChecked(settings.value(GW_FIND_REPLACE_MATCH_CASE, false).toBool());
     d->matchCaseButton->setToolTip(tr("Match case"));
 
-    d->wholeWordButton = new QPushButton(QChar(fa::quoteleft));
-    d->wholeWordButton->setFont(d->awesome->font(style::stfas, buttonFont.pointSize()));
-    d->wholeWordButton->setFixedWidth(width);
+    d->wholeWordButton = new QPushButton(QChar(fa::quoteleft), this);
     d->wholeWordButton->setCheckable(true);
     d->wholeWordButton->setChecked(settings.value(GW_FIND_REPLACE_WHOLE_WORD, false).toBool());
     d->wholeWordButton->setToolTip(tr("Whole word"));
 
-    d->regularExpressionButton = new QPushButton(".*");
-    d->regularExpressionButton->setFixedWidth(width);
-    d->regularExpressionButton->setFont(buttonFont);
+    d->regularExpressionButton = new QPushButton(".*", this);
+    d->regularExpressionButton->setObjectName("regexButton");
     d->regularExpressionButton->setCheckable(true);
     d->regularExpressionButton->setChecked(settings.value(GW_FIND_REPLACE_REGEX, false).toBool());
     d->regularExpressionButton->setToolTip(tr("Regular expression"));
 
     d->highlightMatchesButton = new QPushButton(QChar(fa::highlighter));
-    d->highlightMatchesButton->setFixedWidth(width);
-    d->highlightMatchesButton->setFont(d->awesome->font(style::stfas, buttonFont.pointSize()));
     d->highlightMatchesButton->setCheckable(true);
     d->highlightMatchesButton->setChecked(settings.value(GW_FIND_REPLACE_HIGHLIGHT_MATCHES, false).toBool());
     d->highlightMatchesButton->setToolTip(tr("Highlight matches"));
@@ -144,20 +117,24 @@ FindReplace::FindReplace(QPlainTextEdit *editor, QWidget *parent)
             d->highlightMatches(checked);
         });
 
-    d->findPrevButton = new QPushButton(QChar(fa::arrowup));
-    d->findPrevButton->setFlat(true);
-    d->findPrevButton->setFont(d->awesome->font(style::stfas, buttonFont.pointSize()));
+    d->findPrevButton = new QPushButton(QChar(fa::arrowup), this);
     d->findPrevButton->setToolTip(tr("Find previous"));
+    d->findPrevButton->setCheckable(false);
+    d->findPrevButton->setFlat(false);
     connect(d->findPrevButton, SIGNAL(pressed()), this, SLOT(findPrevious()));
     d->findNextButton = new QPushButton(QChar(fa::arrowdown));
-    d->findNextButton->setFlat(true);
-    d->findNextButton->setFont(d->awesome->font(style::stfas, buttonFont.pointSize()));
     d->findNextButton->setToolTip(tr("Find next"));
+    d->findNextButton->setCheckable(false);
+    d->findNextButton->setFlat(false);
     connect(d->findNextButton, SIGNAL(pressed()), this, SLOT(findNext()));
 
-    d->replaceButton = new QPushButton(tr("Replace"));
+    d->replaceButton = new QPushButton(tr("Replace"), this);
+    d->replaceButton->setFlat(true);
+    d->replaceButton->setObjectName("replaceButton");
     connect(d->replaceButton, SIGNAL(pressed()), this, SLOT(replace()));
     d->replaceAllButton = new QPushButton(tr("Replace All"));
+    d->replaceAllButton->setFlat(true);
+    d->replaceAllButton->setObjectName("replaceAllButton");
     connect(d->replaceAllButton, SIGNAL(pressed()), this, SLOT(replaceAll()));
     d->replaceRowVisible = false;
 
@@ -169,15 +146,6 @@ FindReplace::FindReplace(QPlainTextEdit *editor, QWidget *parent)
     d->statusLabel = new QLabel();
 
     QPushButton *closeButton = new QPushButton(QChar(fa::timescircle), this);
-    closeButton->setFlat(true);
-    closeButton->setFont(d->awesome->font(style::stfas, closeButton->font().pointSize()));
-
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
-    closeButton->setFixedWidth(closeButton->fontMetrics().horizontalAdvance("@@"));
-#else
-    closeButton->setFixedWidth(closeButton->fontMetrics().boundingRect("@@").width());
-#endif
-
     closeButton->setObjectName("findReplaceCloseButton");
         
     this->connect(closeButton,
@@ -398,7 +366,9 @@ void FindReplace::replaceAll()
         count++;
     }
 
-    d->statusLabel->setText(tr("%Ln replacement(s)", "", count));
+    //~ singular %Ln replacement
+    //~ plural %Ln replacements
+    d->statusLabel->setText(tr("%Ln replacement(s)", "", count)); //~ singular
     d->editor->setFocus();
 }
 
@@ -448,14 +418,14 @@ bool FindReplacePrivate::findMatch(QTextCursor& cursor, bool wrap, bool backward
 
             cursor = this->editor->textCursor();
             cursor.movePosition(location);
-            this->statusLabel->setText(QObject::tr("Search wrapped"));
+            this->statusLabel->setText(FindReplace::tr("Search wrapped"));
 
             wrapCount++;
         }
     }
 
     if (!found) {
-        this->statusLabel->setText(QObject::tr("No results"));
+        this->statusLabel->setText(FindReplace::tr("No results"));
         this->statusLabel->setProperty("error", true);
     }
 
@@ -497,7 +467,7 @@ void FindReplacePrivate::highlightMatches(bool enabled)
     this->editor->setExtraSelections(selections);
 
     if (!selections.isEmpty()) {
-        this->statusLabel->setText(QObject::tr("%1 matches").arg(selections.count()));
+        this->statusLabel->setText(FindReplace::tr("%1 matches").arg(selections.count()));
     }    
 }
 

@@ -1,21 +1,8 @@
-/***********************************************************************
+/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2014-2020 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #ifndef EXPORTDIALOG_H
 #define EXPORTDIALOG_H
@@ -46,7 +33,7 @@ public:
      * Constructor that takes text document to export as the parameter,
      * as well as the parent widget which will own this dialog.
      */
-    ExportDialog(MarkdownDocument *document, QWidget *parent = 0);
+    ExportDialog(MarkdownDocument *document, QWidget *parent = nullptr);
     virtual ~ExportDialog();
 
 signals:
@@ -69,12 +56,12 @@ private slots:
     /*
     * Called when the user clicks on Export button.
     */
-    void accept();
+    void accept() override;
 
     /*
     * Called when the user clicks on the Cancel button.
     */
-    void reject();
+    void reject() override;
 
     /*
     * Called when the user changes which exporter to use via selecting

@@ -1,27 +1,14 @@
-/***********************************************************************
+/*
+ * SPDX-FileCopyrightText: 2020-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2020 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #include <QStack>
 #include <QTextStream>
 #include <QtGlobal>
 
-#include "3rdparty/cmark-gfm/src/cmark-gfm.h"
+#include "../3rdparty/cmark-gfm/src/cmark-gfm.h"
 
 #include "markdownast.h"
 
@@ -91,14 +78,13 @@ void MarkdownAST::setRoot(cmark_node *root)
     QStack<cmark_node *> fromNodes;
     QStack<MarkdownNode *> toNodes;
 
+    d->root->setDataFrom(root);
     fromNodes.push(root);
     toNodes.push(d->root);
 
     while (!fromNodes.isEmpty()) {
         cmark_node *source = fromNodes.pop();
         MarkdownNode *dest = toNodes.pop();
-
-        dest->setDataFrom(source);
 
         // Prep children nodes for cloning.
         MarkdownNode *destParent = dest;
@@ -107,6 +93,7 @@ void MarkdownAST::setRoot(cmark_node *root)
         while (NULL != source) {
             fromNodes.push(source);
             dest = d->arena.allocate();
+            dest->setDataFrom(source);
             destParent->appendChild(dest);
             toNodes.push(dest);
             source = cmark_node_next(source);

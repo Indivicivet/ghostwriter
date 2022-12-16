@@ -7,12 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Updated file licenses to be compliant with REUSE.
+* Transitioned to KDE Frameworks' Sonnet spell checking library, which provides language detection as a new feature.
+* Transitioned to building with CMake.
+* Images can now be pasted from the clipboard with a prompt to save the image.
+* KDE about dialogs (for both *ghostwriter* and KDE) have been added to the help menu.
+* KDE bug report dialog and donate dialog have been added to the help menu.
+
+### Fixed
+
+* Fixed line break symbol not being painted correctly under Windows.
+* The line break symbol will now only be painted at the end of a hard line break if the text cursor is not at the end of the line.
+* Saving an untitled draft file will prompt the user to "Save As".
+* Upon the user saving an untitled draft to a named file, the original untitled file is deleted to reduce clutter.
+* Fixed crash on link creation under Linux.
+* Fixed several memory leaks related to spell checking and cmark-gfm calls.
+* Width of the drop down combo box in the export dialog is now stretched to 100% to fit all options.
+* Issue #460158: Fixed IME window displacement.
+* Fixed syntax highlighting on line breaks, including for Unicode.
+
+## [2.2.0] - 2022-09-17
+
+### Fixed
+
+* Issue #813: Opening the app after a fresh install no longer complains of a file backup error when text is entered.
+* Issue #815: Invoking the app from the command line with a non-existent file path specified will now create an empty file for the path.
+* Spaces are now properly underlined in emphasized text when emphasis style option is set to underline.
+
+### Added
+
+* A line break symbol is now drawn at the end of lines having two trailing spaces to designate a line break.
+
+## [2.1.6] - 2022-09-13
+
+### Fixed
+
+* Changed Classic theme's dark mode selection color from the light mode's color to the appropriate dark color.
+* Changed live preview's code block styling to scroll on overflow.
+* Fixed regression in translations failing to load.
+
+## [2.1.5] - 2022-09-09
+
 ### Fixed
 
 * When renaming a file, file will now be saved even if the new file name already exists, provided the user chooses to proceed from the warning dialog.
 * Spell check dialog no longer eats HTML angle brackets when showing the context around a misspelled word.
 * Application now supports Qt 6 while maintaining backward compatibility with Qt 5.
 * Various under-the-hood refactoring/improvements have been added.
+* CSS and QSS style sheets now support SASS-style variables.
+* Hover and pressed button effects have been added to improve visibility.
+* User interface component icons and text have had their coloring adjusted to better meet WCAG accessibility standards.
+* Issues #790, 803, and 809: To prevent the equation and typing duplication in math equations, math rendering has been restricted to the Pandoc processor.  All other Markdown processors will no longer render math, since special preprocessing is required that only Pandoc does.
+* Added a command line option `--disable-gpu` to disable GPU acceleration to allow users to bypass a Windows bug in Qt 6 where full screen windows having an OpenGL component (in this case, QWebEngineView) cannot display menus (popups, menus from the menu bar).
 
 ## [2.1.4] - 2022-06-18
 
@@ -78,7 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - 2021-05-08
 
-#### Added
+### Added
 
 * cmark-gfm now replaces Sundown as the default Markdown processor for live previews an export.
 * Syntax highlighting now utilizes cmark-gfm for better accuracy, especially with nested blocks.

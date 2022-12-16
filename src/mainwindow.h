@@ -1,21 +1,8 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2014-2022 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #ifndef MAIN_WINDOW_H
 #define MAIN_WINDOW_H
@@ -27,7 +14,7 @@
 #include <QSettings>
 #include <QSplitter>
 
-#include "3rdparty/QtAwesome/QtAwesome.h"
+#include "../3rdparty/QtAwesome/QtAwesome.h"
 
 #include "appsettings.h"
 #include "documentmanager.h"
@@ -57,15 +44,15 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow(const QString &filePath = QString(), QWidget *parent = 0);
+    MainWindow(const QString &filePath = QString(), QWidget *parent = nullptr);
     virtual ~MainWindow();
 
 protected:
-    QSize sizeHint() const;
-    void resizeEvent(QResizeEvent *event);
-    void keyPressEvent(QKeyEvent *e);
-    bool eventFilter(QObject *obj, QEvent *event);
-    void closeEvent(QCloseEvent *event);
+    QSize sizeHint() const  override;
+    void resizeEvent(QResizeEvent *event) override;
+    void keyPressEvent(QKeyEvent *e) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void quitApplication();
@@ -80,10 +67,8 @@ private slots:
     void toggleDisplayTimeInFullScreen(bool checked);
     void changeEditorWidth(EditorWidth editorWidth);
     void changeInterfaceStyle(InterfaceStyle style);
-    void insertImage();
     void showQuickReferenceGuide();
     void showWikiPage();
-    void showAbout();
     void changeFocusMode(FocusMode focusMode);
     void applyTheme();
     void refreshRecentFiles();
@@ -100,6 +85,7 @@ private slots:
     void onAboutToShowMenuBarMenu();
     void onSidebarVisibilityChanged(bool visible);
     void toggleSidebarVisible(bool visible);
+    void runSpellCheck();
 
 private:
     QtAwesome *awesome;

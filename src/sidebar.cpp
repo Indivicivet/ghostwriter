@@ -1,21 +1,8 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2020-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2020-2022 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #include <QApplication>
 #include <QHBoxLayout>
@@ -120,22 +107,24 @@ Sidebar::~Sidebar()
     ;
 }
 
-void Sidebar::addTab
-(
-    QPushButton *button,
-    QWidget *widget
+void Sidebar::addTab(
+    const QChar &glyphIcon,
+    QWidget *widget,
+    const QString &tooltip,
+    const QString &objectName
 )
 {
     Q_D(Sidebar);
 
-    this->insertTab(d->tabs->count(), button, widget);
+    this->insertTab(d->tabs->count(), glyphIcon, widget, tooltip, objectName);
 }
 
-void Sidebar::insertTab
-(
+void Sidebar::insertTab(
     int index,
-    QPushButton *button,
-    QWidget *widget
+    const QChar &glyphIcon,
+    QWidget *widget,
+    const QString &tooltip,
+    const QString &objectName
 )
 {
     Q_D(Sidebar);
@@ -145,12 +134,17 @@ void Sidebar::insertTab
     } else if (index > d->tabs->count()) {
         index = d->tabs->count();
     }
-    
-    button->setParent(this);
+
+    QPushButton *button = new QPushButton(glyphIcon, this);
     button->setCheckable(true);
+    button->setToolTip(tooltip);
 
     if (d->tabs->count() < 1) {
         button->setChecked(true);
+    }
+
+    if (!objectName.isNull() && !objectName.isEmpty()) {
+        button->setObjectName(objectName);
     }
 
     d->stack->insertWidget(index, widget);
@@ -252,14 +246,28 @@ bool Sidebar::autoHideEnabled() const
     return d->autoHideEnabled;
 }
 
-void Sidebar::addButton(QPushButton *button)
+QPushButton *Sidebar::addButton(
+    const QChar &glyphIcon,
+    const QString &tooltip,
+    const QString &objectName
+)
 {
     Q_D(Sidebar);
 
-    this->insertButton(d->buttons->count(), button);
+    return this->insertButton(
+        d->buttons->count(),
+        glyphIcon,
+        tooltip,
+        objectName
+    );
 }
 
-void Sidebar::insertButton(int index, QPushButton *button)
+QPushButton *Sidebar::insertButton(
+    int index,
+    const QChar &glyphIcon,
+    const QString &tooltip,
+    const QString &objectName
+)
 {
     Q_D(Sidebar);
 
@@ -269,7 +277,17 @@ void Sidebar::insertButton(int index, QPushButton *button)
         index = d->buttons->count();
     }
 
+    QPushButton *button = new QPushButton(glyphIcon, this);
+    button->setFocusPolicy(Qt::NoFocus);
+    button->setCheckable(false);
+    button->setToolTip(tooltip);
+
+    if (!objectName.isNull() && !objectName.isEmpty()) {
+        button->setObjectName(objectName);
+    }
+
     d->buttons->insertWidget(index, button);
+    return button;
 }
 
 void Sidebar::removeButton(int index)

@@ -1,21 +1,8 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2014-2021 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #ifndef APPSETTINGS_H
 #define APPSETTINGS_H
@@ -27,7 +14,6 @@
 
 #include "exporter.h"
 #include "markdowneditortypes.h"
-#include "statisticsindicator.h"
 
 namespace ghostwriter
 {
@@ -54,8 +40,6 @@ public:
     void store();
 
     QString themeDirectoryPath() const;
-    QString dictionaryPath() const;
-    QString translationsPath() const;
     QString draftLocation() const;
 
     bool autoSaveEnabled() const;
@@ -133,16 +117,12 @@ public:
     bool darkModeEnabled() const;
     void setDarkModeEnabled(bool enabled);
 
-    QString dictionaryLanguage() const;
-    void setDictionaryLanguage(const QString &language);
-    Q_SIGNAL void dictionaryLanguageChanged(const QString &language);
-
     QString locale() const;
-    void setLocale(const QString &locale);
+    bool setLocale(const QString &locale);
 
-    bool liveSpellCheckEnabled() const;
-    Q_SLOT void setLiveSpellCheckEnabled(bool enabled);
-    Q_SIGNAL void liveSpellCheckChanged(bool enabled);
+    QStringList availableTranslations() const;
+
+    Q_SIGNAL void spellCheckSettingsChanged() const;
 
     EditorWidth editorWidth() const;
     void setEditorWidth(EditorWidth editorWidth);

@@ -1,21 +1,8 @@
-/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2014-2020 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #include <QCheckBox>
 #include <QColor>
@@ -31,7 +18,7 @@
 #include <QString>
 #include <QStringList>
 
-#include "3rdparty/QtAwesome/QtAwesome.h"
+#include "../3rdparty/QtAwesome/QtAwesome.h"
 
 #include "colorschemepreviewer.h"
 #include "messageboxhelper.h"
@@ -187,7 +174,6 @@ ThemeSelectionDialog::ThemeSelectionDialog
             d->deleteTheme();
         }
     );
-    d->themeListWidget;
     this->connect
     (
         darkModeCheckbox,
@@ -408,8 +394,8 @@ void ThemeSelectionDialogPrivate::deleteTheme()
         MessageBoxHelper::critical
         (
             q,
-            QObject::tr("Cannot delete theme."),
-            QObject::tr("Sorry, this is a built-in theme that cannot be deleted.")
+            ThemeSelectionDialog::tr("Cannot delete theme."),
+            ThemeSelectionDialog::tr("Sorry, this is a built-in theme that cannot be deleted.")
         );
         return;
     }
@@ -420,7 +406,7 @@ void ThemeSelectionDialogPrivate::deleteTheme()
         MessageBoxHelper::question
         (
             q,
-            QObject::tr("Are you sure you want to permanently delete the '%1' theme?")
+            ThemeSelectionDialog::tr("Are you sure you want to permanently delete the '%1' theme?")
             .arg(themeName),
             QString(),
             QMessageBox::Yes | QMessageBox::No,
@@ -436,7 +422,7 @@ void ThemeSelectionDialogPrivate::deleteTheme()
             MessageBoxHelper::critical
             (
                 q,
-                QObject::tr("Failed to delete theme."),
+                ThemeSelectionDialog::tr("Failed to delete theme."),
                 err
             );
         } else {
@@ -464,8 +450,8 @@ void ThemeSelectionDialogPrivate::editTheme()
             MessageBoxHelper::critical
             (
                 q,
-                QObject::tr("Cannot edit theme."),
-                QObject::tr("Sorry, this is a built-in theme that cannot be edited.")
+                ThemeSelectionDialog::tr("Cannot edit theme."),
+                ThemeSelectionDialog::tr("Sorry, this is a built-in theme that cannot be edited.")
             );
             return;
         }

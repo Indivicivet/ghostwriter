@@ -1,21 +1,8 @@
-/***********************************************************************
+/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2014-2020 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #include <QApplication>
 #include <QCheckBox>
@@ -54,6 +41,7 @@ ExportDialog::ExportDialog(MarkdownDocument *document, QWidget *parent)
     this->setWindowTitle(tr("Export"));
     
     exporterComboBox = new QComboBox();
+    exporterComboBox->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Expanding);
 
     QSettings settings;
     QString lastExporterName =
@@ -76,8 +64,9 @@ ExportDialog::ExportDialog(MarkdownDocument *document, QWidget *parent)
     QVariant exporterVariant = exporterComboBox->currentData();
     Exporter *exporter = (Exporter *) exporterVariant.value<void *>();
     fileFormatComboBox = new QComboBox();
-    
-    foreach (const ExportFormat *format, exporter->supportedFormats()) {
+    fileFormatComboBox->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Expanding);
+
+    for (const ExportFormat *format : exporter->supportedFormats()) {
         fileFormatComboBox->addItem(format->name(), QVariant::fromValue((void *) format));
     }
     
@@ -204,7 +193,7 @@ void ExportDialog::onExporterChanged(int index)
     Exporter *exporter = (Exporter *) exporterVariant.value<void *>();
     fileFormatComboBox->clear();
     
-    foreach (const ExportFormat *format, exporter->supportedFormats()) {
+    for (const ExportFormat *format : exporter->supportedFormats()) {
         fileFormatComboBox->addItem(format->name(), QVariant::fromValue((void *) format));
     }
 

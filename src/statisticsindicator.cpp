@@ -1,21 +1,8 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2021-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2021 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #include <QListView>
 
@@ -23,13 +10,31 @@
 
 namespace ghostwriter
 {
+//~ singular %Ln word
+//~ plural %Ln words
 static QString wordCountText(int value) { return StatisticsIndicator::tr("%Ln word(s)", "", value); }
+
+//~ singular %Ln character
+//~ plural %Ln characters
 static QString characterCountText(int value) { return StatisticsIndicator::tr("%Ln character(s)", "", value); }
+
+//~ singular %Ln sentence
+//~ plural %Ln sentences
 static QString sentenceCountText(int value) { return StatisticsIndicator::tr("%Ln sentence(s)", "", value); }
+
+//~ singular %Ln paragraph
+//~ plural %Ln paragraphs
 static QString paragraphCountText(int value) { return StatisticsIndicator::tr("%Ln paragraph(s)", "", value); }
+
+//~ singular %Ln page
+//~ plural %Ln pages
 static QString pageCountText(int value) { return StatisticsIndicator::tr("%Ln page(s)", "", value); }
+
+//~ singular %Ln word added
+//~ plural %Ln words added
 static QString wordsAddedText(int value) { return StatisticsIndicator::tr("%Ln word(s) added", "", value); }
-static QString wpmText(int value) { return StatisticsIndicator::tr("%Ln wpm", "", value); }
+
+static QString wpmText(int value) { return StatisticsIndicator::tr("%1 wpm").arg(value); }
 static QString readTimeText(int minutes) { return StatisticsIndicator::tr("%1:%2 read time")
                                                         .arg((int) (minutes / 60), 2, 10, QChar('0'))
                                                         .arg((int) (minutes % 60), 2, 10, QChar('0')); }

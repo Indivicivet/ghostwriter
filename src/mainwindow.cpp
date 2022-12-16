@@ -1,26 +1,12 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
+ * SPDX-FileCopyrightText: 2009-2014 Graeme Gott <graeme@gottcode.org>
  *
- * Copyright (C) 2014-2022 wereturtle
- * Copyright (C) 2009, 2010, 2011, 2012, 2013, 2014 Graeme Gott <graeme@gottcode.org>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #include <QApplication>
 #include <QClipboard>
-#include <QCommonStyle>
 #include <QDesktopServices>
 #include <QFile>
 #include <QFileDialog>
@@ -29,21 +15,27 @@
 #include <QFontDialog>
 #include <QGridLayout>
 #include <QIcon>
+#include <QImageReader>
 #include <QIODevice>
 #include <QLabel>
 #include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMimeDatabase>
+#include <QMimeType>
 #include <QScrollBar>
 #include <QSettings>
 #include <QSizePolicy>
 #include <QStatusBar>
-#include <QTemporaryFile>
 #include <QTextDocumentFragment>
+
+#include <KCoreAddons/KAboutData>
+#include <KXmlGui/KAboutApplicationDialog>
+#include <KXmlGui/KHelpMenu>
 
 #include "3rdparty/QtAwesome/QtAwesome.h"
 
-#include "documenthistory.h"
+#include "library.h"
 #include "exporter.h"
 #include "exporterfactory.h"
 #include "findreplace.h"
@@ -56,8 +48,8 @@
 #include "simplefontdialog.h"
 #include "stylesheetbuilder.h"
 #include "themeselectiondialog.h"
-#include "spelling/dictionarymanager.h"
 #include "spelling/spellcheckdecorator.h"
+#include "spelling/spellcheckdialog.h"
 
 namespace ghostwriter
 {
@@ -81,7 +73,6 @@ MainWindow::MainWindow(const QString &filePath, QWidget *parent)
     this->focusModeEnabled = false;
     this->awesome = new QtAwesome(qApp);
     this->awesome->initFontAwesome();
-    setWindowIcon(QIcon(":/resources/images/ghostwriter.svg"));
     this->setObjectName("mainWindow");
     this->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 
@@ -115,16 +106,12 @@ MainWindow::MainWindow(const QString &filePath, QWidget *parent)
     );
     this->setFocusProxy(editor);
 
-    // We need to set an empty style for the editor's scrollbar in order for the
-    // scrollbar CSS stylesheet to take full effect.  Otherwise, the scrollbar's
-    // background color will have the Windows 98 checkered look rather than
-    // being a solid or transparent color.
-    //
-    editor->verticalScrollBar()->setStyle(new QCommonStyle());
-    editor->horizontalScrollBar()->setStyle(new QCommonStyle());
-
     spelling = new SpellCheckDecorator(editor);
-    spelling->setLiveSpellCheckEnabled(appSettings->liveSpellCheckEnabled());
+    connect(appSettings,
+        &AppSettings::spellCheckSettingsChanged,
+        spelling,
+        &SpellCheckDecorator::settingsChanged
+    );
 
     buildSidebar();
 
@@ -151,20 +138,28 @@ MainWindow::MainWindow(const QString &filePath, QWidget *parent)
     editor->setAutoMatchEnabled('`', appSettings->autoMatchCharEnabled('`'));
     editor->setAutoMatchEnabled('<', appSettings->autoMatchCharEnabled('<'));
 
-    QWidget *editorPane = new QWidget(this);
-    editorPane->setObjectName("editorLayoutArea");
-    editorPane->setLayout(editor->preferredLayout());
-
-    QStringList recentFiles;
+    Library library;
+    Bookmarks recentFiles;
+    Bookmark fileBookmark(filePath);
 
     if (appSettings->fileHistoryEnabled()) {
-        DocumentHistory history;
-        recentFiles = history.recentFiles(MAX_RECENT_FILES + 2);
+        recentFiles = library.recentFiles(MAX_RECENT_FILES + 2);
+
+        if (fileBookmark.isValid()) {
+            recentFiles.removeAll(fileBookmark);
+        }
     }
 
     if (!filePath.isNull() && !filePath.isEmpty()) {
         fileToOpen = filePath;
-        recentFiles.removeAll(QFileInfo(filePath).absoluteFilePath());
+
+        // If the file passed as a command line argument does not exist, then
+        // create it.
+        if (!QFileInfo(fileToOpen).exists()) {
+            QFile file(fileToOpen);
+            file.open(QIODevice::WriteOnly);
+            file.close();
+        }
     }
 
     if (fileToOpen.isNull()
@@ -173,10 +168,10 @@ MainWindow::MainWindow(const QString &filePath, QWidget *parent)
         QString lastFile;
 
         if (!recentFiles.isEmpty()) {
-            lastFile = recentFiles.first();
+            lastFile = recentFiles.first().filePath();
         }
 
-        if (QFileInfo::exists(lastFile)) {
+        if (!lastFile.isNull()) {
             fileToOpen = lastFile;
             recentFiles.removeAll(lastFile);
         }
@@ -204,13 +199,13 @@ MainWindow::MainWindow(const QString &filePath, QWidget *parent)
         );
 
         if (i < recentFiles.size()) {
-            recentFilesActions[i]->setText(recentFiles.at(i));
+            recentFilesActions[i]->setText(recentFiles.at(i).filePath());
 
             // Use the action's data for access to the actual file path, since
             // KDE Plasma will add a keyboard accelerator to the action's text
             // by inserting an ampersand (&) into it.
             //
-            recentFilesActions[i]->setData(recentFiles.at(i));
+            recentFilesActions[i]->setData(recentFiles.at(i).filePath());
 
             recentFilesActions[i]->setVisible(true);
         } else {
@@ -246,8 +241,6 @@ MainWindow::MainWindow(const QString &filePath, QWidget *parent)
     connect(appSettings, SIGNAL(hideMenuBarInFullScreenChanged(bool)), this, SLOT(toggleHideMenuBarInFullScreen(bool)));
     connect(appSettings, SIGNAL(fileHistoryChanged(bool)), this, SLOT(toggleFileHistoryEnabled(bool)));
     connect(appSettings, SIGNAL(displayTimeInFullScreenChanged(bool)), this, SLOT(toggleDisplayTimeInFullScreen(bool)));
-    connect(appSettings, SIGNAL(dictionaryLanguageChanged(QString)), spelling, SLOT(setDictionary(QString)));
-    connect(appSettings, SIGNAL(liveSpellCheckChanged(bool)), spelling, SLOT(setLiveSpellCheckEnabled(bool)));
     connect(appSettings, SIGNAL(editorWidthChanged(EditorWidth)), this, SLOT(changeEditorWidth(EditorWidth)));
     connect(appSettings, SIGNAL(interfaceStyleChanged(InterfaceStyle)), this, SLOT(changeInterfaceStyle(InterfaceStyle)));
     connect(appSettings, SIGNAL(previewTextFontChanged(QFont)), this, SLOT(applyTheme()));
@@ -255,17 +248,6 @@ MainWindow::MainWindow(const QString &filePath, QWidget *parent)
 
     if (this->isFullScreen() && appSettings->hideMenuBarInFullScreenEnabled()) {
         this->menuBar()->hide();
-    }
-
-    // Default language for dictionary is set from AppSettings initialization.
-    QString language = appSettings->dictionaryLanguage();
-
-    // If we have an available dictionary, then set up spell checking.
-    if (!language.isNull() && !language.isEmpty()) {
-        spelling->setDictionary(language);
-        spelling->setLiveSpellCheckEnabled(appSettings->liveSpellCheckEnabled());
-    } else {
-        spelling->setLiveSpellCheckEnabled(false);
     }
 
     this->connect
@@ -316,7 +298,7 @@ MainWindow::MainWindow(const QString &filePath, QWidget *parent)
 
     splitter = new QSplitter(this);
     splitter->addWidget(sidebar);
-    splitter->addWidget(editorPane);
+    splitter->addWidget(editor);
     splitter->addWidget(htmlPreview);
     splitter->setChildrenCollapsible(false);
     splitter->setStretchFactor(0, 0);
@@ -496,9 +478,6 @@ void MainWindow::quitApplication()
         windowSettings.setValue(GW_SPLITTER_GEOMETRY_KEY, splitter->saveState());
         windowSettings.sync();
 
-        DictionaryManager::instance()->addProviders();
-        DictionaryManager::instance()->setDefaultLanguage(language);
-
         this->editor->document()->disconnect();
         this->editor->disconnect();
         this->htmlPreview->disconnect();
@@ -670,89 +649,14 @@ void MainWindow::changeInterfaceStyle(InterfaceStyle style)
     applyTheme();
 }
 
-void MainWindow::insertImage()
-{
-    QString startingDirectory = QString();
-    MarkdownDocument *document = documentManager->document();
-
-    if (!document->isNew()) {
-        startingDirectory = QFileInfo(document->filePath()).dir().path();
-    }
-
-    QString imagePath =
-        QFileDialog::getOpenFileName
-        (
-            this,
-            tr("Insert Image"),
-            startingDirectory,
-            QString("%1 (*.jpg *.jpeg *.gif *.png *.bmp);; %2")
-            .arg(tr("Images"))
-            .arg(tr("All Files"))
-        );
-
-    if (!imagePath.isNull() && !imagePath.isEmpty()) {
-        QFileInfo imgInfo(imagePath);
-        bool isRelativePath = false;
-
-        if (imgInfo.exists()) {
-            if (!document->isNew()) {
-                QFileInfo docInfo(document->filePath());
-
-                if (docInfo.exists()) {
-                    imagePath = docInfo.dir().relativeFilePath(imagePath);
-                    isRelativePath = true;
-                }
-            }
-        }
-
-        if (!isRelativePath) {
-            imagePath = QString("file://") + imagePath;
-        }
-
-        QTextCursor cursor = editor->textCursor();
-        cursor.insertText(QString("![](%1)").arg(imagePath));
-    }
-}
-
 void MainWindow::showQuickReferenceGuide()
 {
-    QDesktopServices::openUrl(QUrl("https://wereturtle.github.io/ghostwriter/quickrefguide.html"));
+    QDesktopServices::openUrl(QUrl("https://ghostwriter.kde.org/documentation"));
 }
 
 void MainWindow::showWikiPage()
 {
-    QDesktopServices::openUrl(QUrl("https://github.com/wereturtle/ghostwriter/wiki"));
-}
-
-void MainWindow::showAbout()
-{
-    QString aboutText =
-        QString("<p><b>") +  qAppName() + QString(" ")
-        + qApp->applicationVersion() + QString("</b></p>")
-        + tr("<p>Copyright &copy; 2014-2022 wereturtle</b>"
-             "<p>You may use and redistribute this software under the terms of the "
-             "<a href=\"http://www.gnu.org/licenses/gpl.html\">"
-             "GNU General Public License Version 3</a>.</p>"
-             "<p>Visit the official website at "
-             "<a href=\"http://github.com/wereturtle/ghostwriter\">"
-             "http://github.com/wereturtle/ghostwriter</a>.</p>"
-             "<p>Special thanks and credit for reused code goes to</p>"
-             "<p><a href=\"mailto:graeme@gottcode.org\">Graeme Gott</a>, "
-             "author of "
-             "<a href=\"http://gottcode.org/focuswriter/\">FocusWriter</a><br/>"
-             "Dmitry Shachnev, author of "
-             "<a href=\"http://sourceforge.net/p/retext/home/ReText/\">Retext</a><br/>"
-             "<a href=\"mailto:gabriel@teuton.org\">Gabriel M. Beddingfield</a>, "
-             "author of <a href=\"http://www.teuton.org/~gabriel/stretchplayer/\">"
-             "StretchPlayer</a><br/>"
-             "<p>I am also deeply indebted to "
-             "<a href=\"mailto:w.vollprecht@gmail.com\">Wolf Vollprecht</a>, "
-             "the author of "
-             "<a href=\"http://uberwriter.wolfvollprecht.de/\">UberWriter</a>, "
-             "for the inspiration he provided in creating such a beautiful "
-             "Markdown editing tool.</p>");
-
-    QMessageBox::about(this, tr("About %1").arg(qAppName()), aboutText);
+    QDesktopServices::openUrl(QUrl("https://github.com/KDE/ghostwriter/wiki"));
 }
 
 void MainWindow::changeFocusMode(FocusMode focusMode)
@@ -765,19 +669,17 @@ void MainWindow::changeFocusMode(FocusMode focusMode)
 void MainWindow::refreshRecentFiles()
 {
     if (appSettings->fileHistoryEnabled()) {
-        DocumentHistory history;
-        QStringList recentFiles = history.recentFiles(MAX_RECENT_FILES + 1);
+        Library library;
+        Bookmarks recentFiles = library.recentFiles(MAX_RECENT_FILES + 1);
         MarkdownDocument *document = documentManager->document();
 
         if (!document->isNew()) {
-            QString sanitizedPath =
-                QFileInfo(document->filePath()).absoluteFilePath();
-            recentFiles.removeAll(sanitizedPath);
+            recentFiles.removeAll(document->filePath());
         }
 
         for (int i = 0; (i < MAX_RECENT_FILES) && (i < recentFiles.size()); i++) {
-            recentFilesActions[i]->setText(recentFiles.at(i));
-            recentFilesActions[i]->setData(recentFiles.at(i));
+            recentFilesActions[i]->setText(recentFiles.at(i).filePath());
+            recentFilesActions[i]->setData(recentFiles.at(i).filePath());
             recentFilesActions[i]->setVisible(true);
         }
 
@@ -789,8 +691,8 @@ void MainWindow::refreshRecentFiles()
 
 void MainWindow::clearRecentFileHistory()
 {
-    DocumentHistory history;
-    history.clear();
+    Library library;
+    library.clear();
 
     for (int i = 0; i < MAX_RECENT_FILES; i++) {
         recentFilesActions[i]->setVisible(false);
@@ -851,26 +753,8 @@ void MainWindow::onFontSizeChanged(int size)
 
 void MainWindow::onSetLocale()
 {
-    bool ok;
-
-    QString locale =
-        LocaleDialog::locale
-        (
-            &ok,
-            appSettings->locale(),
-            appSettings->translationsPath()
-        );
-
-    if (ok && (locale != appSettings->locale())) {
-        appSettings->setLocale(locale);
-
-        QMessageBox::information
-        (
-            this,
-            QApplication::applicationName(),
-            tr("Please restart the application for changes to take effect.")
-        );
-    }
+    LocaleDialog *dialog = new LocaleDialog(this);
+    dialog->show();
 }
 
 void MainWindow::copyHtml()
@@ -1011,7 +895,7 @@ void MainWindow::buildMenuBar()
     fileMenu->addAction(createWindowAction(tr("&New"), documentManager, SLOT(close()), QKeySequence::New));
     fileMenu->addAction(createWindowAction(tr("&Open"), documentManager, SLOT(open()), QKeySequence::Open));
 
-    QMenu *recentFilesMenu = new QMenu(tr("Open &Recent..."));
+    QMenu *recentFilesMenu = new QMenu(tr("Open &Recent..."), fileMenu);
     recentFilesMenu->addAction(createWindowAction(tr("Reopen Closed File"), documentManager, SLOT(reopenLastClosedFile()), QKeySequence("SHIFT+CTRL+T")));
     recentFilesMenu->addSeparator();
 
@@ -1025,7 +909,7 @@ void MainWindow::buildMenuBar()
     fileMenu->addMenu(recentFilesMenu);
 
     fileMenu->addSeparator();
-    fileMenu->addAction(createWindowAction(tr("&Save"), documentManager, SLOT(save()), QKeySequence::Save));
+    fileMenu->addAction(createWindowAction(tr("&Save"), documentManager, SLOT(saveFile()), QKeySequence::Save));
     fileMenu->addAction(createWindowAction(tr("Save &As..."), documentManager, SLOT(saveAs()), QKeySequence::SaveAs));
     fileMenu->addAction(createWindowAction(tr("R&ename..."), documentManager, SLOT(rename())));
     fileMenu->addAction(createWindowAction(tr("Re&load from Disk..."), documentManager, SLOT(reload())));
@@ -1045,7 +929,7 @@ void MainWindow::buildMenuBar()
     editMenu->addAction(createWidgetAction(tr("&Paste"), editor, SLOT(paste()), QKeySequence::Paste));
     editMenu->addAction(createWidgetAction(tr("Copy &HTML"), this, SLOT(copyHtml()), QKeySequence("SHIFT+CTRL+C")));
     editMenu->addSeparator();
-    editMenu->addAction(createWidgetAction(tr("&Insert Image..."), this, SLOT(insertImage())));
+    editMenu->addAction(createWidgetAction(tr("&Insert Image..."), editor, SLOT(insertImage())));
     editMenu->addSeparator();
 
     editMenu->addAction(createWindowAction(tr("&Find"), findReplace, SLOT(showFindView()), QKeySequence::Find));
@@ -1053,7 +937,7 @@ void MainWindow::buildMenuBar()
     editMenu->addAction(createWindowAction(tr("Find &Next"), findReplace, SLOT(findNext()), QKeySequence::FindNext));
     editMenu->addAction(createWindowAction(tr("Find &Previous"), findReplace, SLOT(findPrevious()), QKeySequence::FindPrevious));
     editMenu->addSeparator();
-    editMenu->addAction(createWindowAction(tr("&Spell check"), spelling, SLOT(runSpellCheck())));
+    editMenu->addAction(createWindowAction(tr("&Spell check"), this, SLOT(runSpellCheck())));
 
     QMenu *formatMenu = this->menuBar()->addMenu(tr("For&mat"));
     formatMenu->addAction(createWidgetAction(tr("&Bold"), editor, SLOT(bold()), QKeySequence::Bold));
@@ -1148,15 +1032,22 @@ void MainWindow::buildMenuBar()
     preferencesAction->setMenuRole(QAction::PreferencesRole);
     settingsMenu->addAction(preferencesAction);
 
+    KHelpMenu *kHelpMenu = new KHelpMenu(this, KAboutData::applicationData(), false);
+
     QMenu *helpMenu = this->menuBar()->addMenu(tr("&Help"));
-    QAction *helpAction = createWindowAction(tr("&About"), this, SLOT(showAbout()));
-    helpAction->setMenuRole(QAction::AboutRole);
-    helpMenu->addAction(helpAction);
-    helpAction = createWindowAction(tr("About &Qt"), qApp, SLOT(aboutQt()));
-    helpAction->setMenuRole(QAction::AboutQtRole);
-    helpMenu->addAction(helpAction);
+    helpMenu->addAction(createWindowAction(
+        kHelpMenu->action(KHelpMenu::menuAboutApp)->text(), kHelpMenu, SLOT(aboutApplication())));
+    helpMenu->addAction(createWindowAction(
+        kHelpMenu->action(KHelpMenu::menuAboutKDE)->text(), kHelpMenu, SLOT(aboutKDE())));
+    helpMenu->addAction(createWindowAction(
+        kHelpMenu->action(KHelpMenu::menuReportBug)->text(), kHelpMenu, SLOT(reportBug())));
+    helpMenu->addAction(createWindowAction(
+        kHelpMenu->action(KHelpMenu::menuDonate)->text(), kHelpMenu, SLOT(donate())));
+    helpMenu->addSeparator();
     helpMenu->addAction(createWindowAction(tr("Quick &Reference Guide"), this, SLOT(showQuickReferenceGuide())));
     helpMenu->addAction(createWindowAction(tr("Wiki"), this, SLOT(showWikiPage())));
+
+    this->menuBar()->addMenu(helpMenu);
 
     connect(fileMenu, SIGNAL(aboutToShow()), this, SLOT(onAboutToShowMenuBarMenu()));
     connect(fileMenu, SIGNAL(aboutToHide()), this, SLOT(onAboutToHideMenuBarMenu()));
@@ -1183,13 +1074,10 @@ void MainWindow::buildStatusBar()
     // Divide the status bar into thirds for placing widgets.
     QFrame *leftWidget = new QFrame(this->statusBar());
     leftWidget->setObjectName("leftStatusBarWidget");
-    leftWidget->setStyleSheet("#leftStatusBarWidget { border: 0; margin: 0; padding: 0 }");
     QFrame *midWidget = new QFrame(this->statusBar());
     midWidget->setObjectName("midStatusBarWidget");
-    midWidget->setStyleSheet("#midStatusBarWidget { border: 0; margin: 0; padding: 0 }");
     QFrame *rightWidget = new QFrame(this->statusBar());
     rightWidget->setObjectName("rightStatusBarWidget");
-    rightWidget->setStyleSheet("#rightStatusBarWidget { border: 0; margin: 0; padding: 0 }");
 
     QHBoxLayout *leftLayout = new QHBoxLayout(leftWidget);
     leftWidget->setLayout(leftLayout);
@@ -1202,11 +1090,8 @@ void MainWindow::buildStatusBar()
     rightLayout->setContentsMargins(0,0,0,0);
 
     // Add left-most widgets to status bar.
-    QFont buttonFont(this->awesome->font(style::stfas, 16));
-
     toggleSidebarButton = new QPushButton(QChar(fa::chevronright));
     toggleSidebarButton->setObjectName("showSidebarButton");
-    toggleSidebarButton->setFont(buttonFont);
     toggleSidebarButton->setFocusPolicy(Qt::NoFocus);
     toggleSidebarButton->setToolTip(tr("Toggle sidebar"));
     toggleSidebarButton->setCheckable(false);
@@ -1264,7 +1149,6 @@ void MainWindow::buildStatusBar()
 
     // Add right-most widgets to status bar.
     QPushButton *button = new QPushButton(QChar(fa::moon));
-    button->setFont(buttonFont);
     button->setFocusPolicy(Qt::NoFocus);
     button->setToolTip(tr("Toggle dark mode"));
     button->setCheckable(true);
@@ -1284,7 +1168,6 @@ void MainWindow::buildStatusBar()
     statusBarWidgets.append(button);
 
     button = new QPushButton(QChar(fa::code));
-    button->setFont(buttonFont);
     button->setFocusPolicy(Qt::NoFocus);
     button->setToolTip(tr("Toggle Live HTML Preview"));
     button->setCheckable(true);
@@ -1305,7 +1188,6 @@ void MainWindow::buildStatusBar()
     );
 
     button = new QPushButton(QChar(fa::backspace));
-    button->setFont(buttonFont);
     button->setFocusPolicy(Qt::NoFocus);
     button->setToolTip(tr("Toggle Hemingway mode"));
     button->setCheckable(true);
@@ -1314,7 +1196,6 @@ void MainWindow::buildStatusBar()
     statusBarWidgets.append(button);
 
     button = new QPushButton(QChar(fa::headphonesalt));
-    button->setFont(buttonFont);
     button->setFocusPolicy(Qt::NoFocus);
     button->setToolTip(tr("Toggle distraction free mode"));
     button->setCheckable(true);
@@ -1323,7 +1204,6 @@ void MainWindow::buildStatusBar()
     statusBarWidgets.append(button);
 
     button = new QPushButton(QChar(fa::expand));
-    button->setFont(buttonFont);
     button->setFocusPolicy(Qt::NoFocus);
     button->setObjectName("fullscreenButton");
     button->setToolTip(tr("Toggle full screen mode"));
@@ -1387,11 +1267,11 @@ void MainWindow::buildSidebar()
     cheatSheetWidget->addItem(tr("![Image](./image.jpg \"Title\")"));
     cheatSheetWidget->addItem(tr("--- *** ___ Horizontal Rule"));
 
-    documentStatsWidget = new DocumentStatisticsWidget();
+    documentStatsWidget = new DocumentStatisticsWidget(this);
     documentStatsWidget->setSelectionMode(QAbstractItemView::NoSelection);
     documentStatsWidget->setAlternatingRowColors(false);
 
-    sessionStatsWidget = new SessionStatisticsWidget();
+    sessionStatsWidget = new SessionStatisticsWidget(this);
     sessionStatsWidget->setSelectionMode(QAbstractItemView::NoSelection);
     sessionStatsWidget->setAlternatingRowColors(false);
 
@@ -1435,43 +1315,10 @@ void MainWindow::buildSidebar()
     sidebar->setMinimumWidth(0.1 * QGuiApplication::primaryScreen()->availableSize().width());
     sidebar->setMaximumWidth(0.5 * QGuiApplication::primaryScreen()->availableSize().width());
 
-    QPushButton *tabButton = new QPushButton();
-    tabButton->setFont(this->awesome->font(style::stfas, 16));
-    tabButton->setText(QChar(fa::hashtag));
-    tabButton->setToolTip(tr("Outline"));
-    sidebar->addTab(tabButton, outlineWidget);
-
-    tabButton = new QPushButton();
-    tabButton->setFont(this->awesome->font(style::stfas, 16));
-    tabButton->setText(QChar(fa::tachometeralt));
-    tabButton->setToolTip(tr("Session Statistics"));
-    sidebar->addTab(tabButton, sessionStatsWidget);
-
-    tabButton = new QPushButton();
-    tabButton->setFont(this->awesome->font(style::stfas, 16));
-    tabButton->setText(QChar(fa::chartbar));
-    tabButton->setToolTip(tr("Document Statistics"));
-    sidebar->addTab(tabButton, documentStatsWidget);
-
-    tabButton = new QPushButton();
-    tabButton->setFont(this->awesome->font(style::stfab, 16));
-    tabButton->setText(QChar(fa::markdown));
-    tabButton->setToolTip(tr("Cheat Sheet"));
-    sidebar->addTab(tabButton, cheatSheetWidget);
-
-    // We need to set an empty style for the scrollbar in order for the
-    // scrollbar CSS stylesheet to take full effect.  Otherwise, the scrollbar's
-    // background color will have the Windows 98 checkered look rather than
-    // being a solid or transparent color.
-    //
-    outlineWidget->verticalScrollBar()->setStyle(new QCommonStyle());
-    outlineWidget->horizontalScrollBar()->setStyle(new QCommonStyle());
-    documentStatsWidget->verticalScrollBar()->setStyle(new QCommonStyle());
-    documentStatsWidget->horizontalScrollBar()->setStyle(new QCommonStyle());
-    sessionStatsWidget->verticalScrollBar()->setStyle(new QCommonStyle());
-    sessionStatsWidget->horizontalScrollBar()->setStyle(new QCommonStyle());
-    cheatSheetWidget->verticalScrollBar()->setStyle(new QCommonStyle());
-    cheatSheetWidget->horizontalScrollBar()->setStyle(new QCommonStyle());
+    sidebar->addTab(QChar(fa::hashtag), outlineWidget, tr("Outline"));
+    sidebar->addTab(QChar(fa::tachometeralt), sessionStatsWidget, tr("Session Statistics"));
+    sidebar->addTab(QChar(fa::chartbar), documentStatsWidget, tr("Document Statistics"));
+    sidebar->addTab(QChar(fa::markdown), cheatSheetWidget, tr("Cheat Sheet"), "cheatSheetTab");
 
     int tabIndex = QSettings().value("sidebarCurrentTab", (int)FirstSidebarTab).toInt();
 
@@ -1481,12 +1328,7 @@ void MainWindow::buildSidebar()
 
     sidebar->setCurrentTabIndex(tabIndex);
 
-    QPushButton *button = new QPushButton(QChar(fa::cog));
-    button->setFont(this->awesome->font(style::stfas, 16));
-    button->setFocusPolicy(Qt::NoFocus);
-    button->setToolTip(tr("Settings"));
-    button->setCheckable(false);
-    sidebar->addButton(button);
+    QPushButton *button = sidebar->addButton(QChar(fa::cog), tr("Settings"));
     this->connect
     (
         button,
@@ -1497,8 +1339,11 @@ void MainWindow::buildSidebar()
             popupMenu->addAction(tr("Font..."), this, SLOT(changeFont()));
             popupMenu->addAction(tr("Application Language..."), this, SLOT(onSetLocale()));
             popupMenu->addAction(tr("Preview Options..."), this, SLOT(showPreviewOptions()));
-            popupMenu->addAction(tr("Preferences..."), this, SLOT(openPreferencesDialog()))->setMenuRole(QAction::PreferencesRole);
-            popupMenu->popup(button->mapToGlobal(QPoint(button->width() / 2, -(button->height() / 2) - 10)));
+            popupMenu->addAction(tr("Preferences..."),
+                this,
+                SLOT(openPreferencesDialog()))->setMenuRole(QAction::PreferencesRole);
+            popupMenu->popup(button->mapToGlobal(QPoint(button->width() / 2,
+                -(button->height() / 2) - 10)));
         }
     );
 
@@ -1562,40 +1407,46 @@ void MainWindow::applyTheme()
         appSettings->previewCodeFont());
 
     editor->setColorScheme(colorScheme);
-    editor->setStyleSheet(styler.editorStyleSheet());
     spelling->setErrorColor(colorScheme.error);
 
     // Do not call this->setStyleSheet().  Calling it more than once in a run
     // (i.e., when changing a theme) causes a crash in Qt 5.11.  Instead,
     // change the main window's style sheet via qApp.
     //
-    qApp->setStyleSheet(styler.layoutStyleSheet());
+    QString styleSheet = styler.widgetStyleSheet();
 
-    this->splitter->setStyleSheet(styler.splitterStyleSheet());
-    this->statusBar()->setStyleSheet(styler.statusBarStyleSheet());
-
-    foreach (QWidget *w, statusBarWidgets) {
-        w->setStyleSheet(styler.statusBarWidgetsStyleSheet());
+    if (styleSheet.isNull()) {
+        qCritical() << "Invalid widget style sheet provided.";
+    } else {
+        qApp->style()->unpolish(qApp);
+        qApp->style()->unpolish(this);
+        qApp->setStyleSheet(styleSheet);
+        qApp->style()->polish(qApp);
+        qApp->style()->polish(this);
     }
 
-    findReplace->setStyleSheet(styler.findReplaceStyleSheet());
-    sidebar->setStyleSheet(styler.sidebarStyleSheet());
+    styleSheet = styler.htmlPreviewStyleSheet();
 
-    // Clear style sheet cache by setting to empty string before
-    // setting the new style sheet.
-    //
-    outlineWidget->setStyleSheet("");
-    outlineWidget->setStyleSheet(styler.sidebarWidgetStyleSheet());
-    cheatSheetWidget->setStyleSheet("");
-    cheatSheetWidget->setStyleSheet(styler.sidebarWidgetStyleSheet());
-    documentStatsWidget->setStyleSheet("");
-    documentStatsWidget->setStyleSheet(styler.sidebarWidgetStyleSheet());
-    sessionStatsWidget->setStyleSheet("");
-    sessionStatsWidget->setStyleSheet(styler.sidebarWidgetStyleSheet());
-
-    htmlPreview->setStyleSheet(styler.htmlPreviewCss());
+    if (styleSheet.isNull()) {
+        qCritical() << "Invalid HTML preview style sheet provided.";
+    } else {
+        htmlPreview->setStyleSheet(styler.htmlPreviewStyleSheet());
+    }
 
     adjustEditor();
+}
+
+void MainWindow::runSpellCheck()
+{
+    SpellCheckDialog *dialog = new SpellCheckDialog(this->editor);
+    connect(
+        dialog,
+        &SpellCheckDialog::finished,
+        this->spelling,
+        &SpellCheckDecorator::rehighlight
+    );
+
+    dialog->show();
 }
 
 } // namespace ghostwriter

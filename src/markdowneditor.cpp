@@ -1,93 +1,90 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
+ * SPDX-FileCopyrightText: 2009-2014 Graeme Gott <graeme@gottcode.org>
+ * SPDX-FileCopyrightText: 2012 Dmitry Shachnev
  *
- * Copyright (C) 2014-2022 wereturtle
- * Copyright (C) 2009, 2010, 2011, 2012, 2013, 2014 Graeme Gott <graeme@gottcode.org>
- * Copyright (C) Dmitry Shachnev 2012
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
+#include <algorithm>
 #include <math.h>
-#include <QDebug>
+
 #include <QApplication>
 #include <QChar>
 #include <QColor>
+#include <QDateTime>
 #include <QDir>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QFontMetricsF>
+#include <QGridLayout>
 #include <QGuiApplication>
 #include <QHeaderView>
+#include <QImageReader>
+#include <QImageWriter>
+#include <QLayout>
+#include <QListWidget>
+#include <QMessageBox>
 #include <QMimeData>
+#include <QMimeDatabase>
+#include <QMimeType>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
-#include <QScreen>
-#include <QScrollBar>
-#include <QString>
-#include <QTextBoundaryFinder>
-#include <QTimer>
-#include <QUrl>
-
-#include <QGridLayout>
-#include <QLayout>
-#include <QListWidget>
 #include <QPlainTextEdit>
 #include <QRegularExpression>
 #include <QResizeEvent>
+#include <QScreen>
+#include <QScrollBar>
 #include <QSize>
+#include <QStandardPaths>
 #include <QString>
+#include <QString>
+#include <QStringLiteral>
+#include <QTextBoundaryFinder>
 #include <QTextCursor>
+#include <QTimer>
+#include <QUrl>
 
 #include "cmarkgfmapi.h"
 #include "markdowneditor.h"
 #include "markdownhighlighter.h"
 #include "markdownstates.h"
 
-#define GW_TEXT_FADE_FACTOR 1.5
+namespace ghostwriter
+{
 
 // Need to be in order of decreasing length
 enum MarkupType {
     MarkupType_None = -1,
-    MarkupType_BoldItalic, // Special case used for checking if bold + itallic are both on
-    MarkupType_Bold, 
+    MarkupType_BoldItalic, // Special case used for checking if bold + italic are both on
+    MarkupType_Bold,
     MarkupType_StrikeThrough,
     MarkupType_Italic,
     MarkupType_Count
 };
 
 // Need to be in order of decreasing length
-static const QString Markup_Strings[MarkupType_Count] = {
+static const QString MarkupStrings[MarkupType_Count] = {
     QStringLiteral("***"),
     QStringLiteral("**"),
     QStringLiteral("~~"),
     QStringLiteral("*")
 };
 
-// Maxmimum length of any markup string, used for initializing scan buffer.
+// Maximum length of any markup string, used for initializing scan buffer.
 static constexpr int Markup_MaxLen = 3;
 
 // Used for stripping out non-markup characters from scan buffers.
-static const QChar Markup_Chars[] = {
+static const QList<QChar> Markup_Chars({
     QChar('*'), 
     QChar('~')
-};
+});
 
 // Used to strip out non-markup characters from scan buffers.
-static const bool isQCharMarkup(const QChar& ch){
-    for (int i = 0; i < sizeof(Markup_Chars) / sizeof(Markup_Chars[0]); i++) {
-        if (ch == Markup_Chars[i]) {
+static bool isQCharMarkup(const QChar &ch) {
+    for (auto markupChar : Markup_Chars) {
+        if (ch == markupChar) {
             return true;
         }
     }
@@ -95,7 +92,8 @@ static const bool isQCharMarkup(const QChar& ch){
 }
 
 // Similar to Qt's indexOf, but can go reverse.
-static int getIndexOfMarkup(const QString& markup, const QString& block_str, int start_pos = -1, const bool reverse = false,
+static int getIndexOfMarkup(const QString &markup, const QString &block_str,
+        int start_pos = -1, const bool reverse = false,
         const bool stop_at_space = false) {
     const int block_len = block_str.length();
     const int markup_len = markup.length();
@@ -117,7 +115,7 @@ static int getIndexOfMarkup(const QString& markup, const QString& block_str, int
     }
     else{
         if (start_pos < 0) start_pos = 0;
-        for (int i = start_pos; i < block_len; i++){
+        for (int i = start_pos; i < block_len; i++) {
             bool match = true;
             for (int j = 0; j < markup_len; j++) {
                 if ((i + j) >= block_len) return -1;
@@ -135,8 +133,6 @@ static int getIndexOfMarkup(const QString& markup, const QString& block_str, int
     return -1;
 };
 
-namespace ghostwriter
-{
 class MarkdownEditorPrivate
 {
     Q_DECLARE_PUBLIC(MarkdownEditor)
@@ -159,6 +155,18 @@ public:
         BlockTypeCode
     } BlockType;
 
+    static const int CursorWidth = 2;
+    const QString lineBreakChar = QString::fromUtf8("↵");
+
+    // We use only image MIME types that are web-friendly so that any inserted
+    // or pasted images can be displayed in the live preview.
+    static const QStringList webMimeTypes;
+
+    static QStringList imageReadFormats;
+    static QStringList imageWriteFormats;
+    static QString imageOpenFilter;
+    static QString imageSaveFilter;
+
     MarkdownEditor *q_ptr;
 
     MarkdownDocument *textDocument;
@@ -170,6 +178,7 @@ public:
     FocusMode focusMode;
     QBrush fadeColor;
     QColor blockColor;
+    QColor whitespaceRenderColor;
     bool insertSpacesForTabs;
     int tabWidth;
     EditorWidth editorWidth;
@@ -206,7 +215,7 @@ public:
     bool scaledTypingHasPaused;
 
     // Use these flags to keep from sending the typingPaused() and
-    // typingPausedScaled() signals multiple times after they have
+    // typingPausedScaled() signals: multiple times after they have
     // already been sent the first time after a pause in the user's
     // typing.
     //
@@ -225,8 +234,7 @@ public:
     bool handleWhitespaceInEmptyMatch(const QChar whitespace);
     void insertFormattingMarkup(const MarkupType markupType);
     QString priorIndentation();
-    QString priorMarkdownBlockItemStart
-    (
+    QString priorMarkdownBlockItemStart(
         const QRegularExpression &itemRegex,
         QRegularExpressionMatch &match
     );
@@ -238,7 +246,37 @@ public:
     bool atCodeBlockEnd(const QTextBlock &block) const;
     bool isBlockquote(const QTextBlock &block) const;
     bool isCodeBlock(const QTextBlock &block) const;
+    
+    static QStringList buildImageReaderFormats();
+    static QStringList buildImageWriterFormats();
+    static QString buildImageFilters(
+        const QStringList &mimeTypes,
+        bool includeWildcardImages = false);
 };
+
+const QStringList MarkdownEditorPrivate::webMimeTypes = QStringList({
+    QStringLiteral("image/png"),
+    QStringLiteral("image/jpeg"),
+    QStringLiteral("image/webp"),
+    QStringLiteral("image/apng"),
+    QStringLiteral("image/avif"),
+    QStringLiteral("image/gif"),
+    QStringLiteral("image/svg")
+});
+
+QStringList MarkdownEditorPrivate::imageReadFormats =
+    MarkdownEditorPrivate::buildImageReaderFormats();
+
+QStringList MarkdownEditorPrivate::imageWriteFormats =
+    MarkdownEditorPrivate::buildImageWriterFormats();
+
+QString MarkdownEditorPrivate::imageOpenFilter =
+    MarkdownEditorPrivate::buildImageFilters(
+        MarkdownEditorPrivate::imageReadFormats, true);
+
+QString MarkdownEditorPrivate::imageSaveFilter =
+    MarkdownEditorPrivate::buildImageFilters(
+        MarkdownEditorPrivate::imageWriteFormats);
 
 MarkdownEditor::MarkdownEditor
 (
@@ -275,7 +313,7 @@ MarkdownEditor::MarkdownEditor
 
     this->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    this->setShowTabsAndSpacesEnabled(true);
+    this->setShowTabsAndSpacesEnabled(false);
 
     // Make sure QPlainTextEdit does not draw a cursor.  (We'll paint it manually.)
     this->setCursorWidth(0);
@@ -530,6 +568,64 @@ void MarkdownEditor::paintEvent(QPaintEvent *event)
     // Draw the visible editor text.
     QPlainTextEdit::paintEvent(event);
 
+    // Find all Markdown line breaks, and draw line break symbols for them.
+    block = firstVisibleBlock();
+    done = false;
+    offset = contentOffset();
+
+    while (block.isValid() && !done) {        
+        QRectF r = this->blockBoundingRect(block).translated(offset);
+
+        // If not in a code block, and the current block ends with two spaces
+        // to indicate a line break in Markdown syntax, then draw the line
+        // break symbol at the end of the block.
+        // 
+        // Also only draw the line break symbol if the text cursor is not at
+        // the end of the line, since it's rather annoying when typing in the
+        // at the end of a sentence and is in the habit of typing double spaces
+        // after punctuation.
+        //
+        if (!d->isCodeBlock(block)
+                && block.text().endsWith("  ")
+                && (this->textCursor().position()
+                    != (block.position() + block.length() - 1))) {
+            // Get position of last space character in the block.
+            QTextCursor c(block);
+            c.movePosition(QTextCursor::EndOfBlock);
+            c.movePosition(QTextCursor::PreviousCharacter);
+            QRect spaceRect = this->cursorRect(c);
+
+            // Calculate where to draw the line break character. We want it
+            // drawn over the space character.
+            QFontMetrics m(this->font());
+            QRect breakRect = m.tightBoundingRect(d->lineBreakChar);
+            dy = (breakRect.height() - spaceRect.height()) / 2;
+            QPoint pos(spaceRect.left(), spaceRect.bottom() + dy);
+
+            // Draw the line break character!
+            QPainter painter(viewport());
+            painter.setFont(this->font());
+
+            if (!this->textCursor().hasSelection()
+                    || (c.position() >= this->textCursor().selectionEnd())
+                    || (c.position() < this->textCursor().selectionStart())) {
+                painter.setPen(d->whitespaceRenderColor);
+            }
+
+            painter.drawText(pos, d->lineBreakChar);
+            painter.end();
+        }
+
+        block = block.next();
+        offset.ry() += r.height();
+
+        // If this is the last text block visible within the viewport...
+        if (offset.y() > viewportRect.height()) {
+            // Finished drawing.
+            done = true;
+        }
+    }
+
     // Draw the text cursor/caret.
     if (d->textCursorVisible && this->hasFocus()) {
         // Get the cursor rect so that we have the ideal height for it,
@@ -537,11 +633,8 @@ void MarkdownEditor::paintEvent(QPaintEvent *event)
         // because we set it to be that in the constructor so that
         // QPlainTextEdit will not draw another cursor underneath this one.)
         //
-        QRect r = cursorRect();
-        r.setWidth(2);
-
         QPainter painter(viewport());
-        painter.fillRect(r, QBrush(d->cursorColor));
+        painter.fillRect(cursorRect(), QBrush(d->cursorColor));
         painter.end();
     }
 }
@@ -605,6 +698,7 @@ void MarkdownEditor::setColorScheme
     
     d->highlighter->setColorScheme(colors);
     d->cursorColor = colors.cursor;
+    d->whitespaceRenderColor = colors.listMarkup;
     d->blockColor = colors.foreground;
     d->blockColor.setAlpha(10);
 
@@ -680,6 +774,47 @@ void MarkdownEditor::setupPaperMargins()
     }
 
     this->setViewportMargins(margin, 20, margin, 0);
+}
+
+QVariant MarkdownEditor::inputMethodQuery(Qt::InputMethodQuery query) const
+{
+    switch (query)
+    {
+    case Qt::ImCursorRectangle:
+    {
+        QFontMetrics metrics(font());
+        QRect r = cursorRect();
+        r.translate(contentOffset().toPoint());
+        r.adjust(0, metrics.ascent(), 0, metrics.ascent());
+        return r;
+    }
+    default:
+        return QPlainTextEdit::inputMethodQuery(query);
+    }
+}
+
+QRect MarkdownEditor::cursorRect(const QTextCursor &cursor) const
+{
+    QRect r = QPlainTextEdit::cursorRect(cursor);
+    r.setWidth(MarkdownEditorPrivate::CursorWidth);
+    return r;
+}
+
+QRect MarkdownEditor::cursorRect() const
+{
+    QRect r = QPlainTextEdit::cursorRect();
+    r.setWidth(MarkdownEditorPrivate::CursorWidth);
+    return r;
+}
+
+int MarkdownEditor::cursorWidth() const
+{
+    return MarkdownEditorPrivate::CursorWidth;
+}
+
+bool MarkdownEditor::canInsertFromMimeData(const QMimeData *source) const
+{
+    return source->hasImage() || QPlainTextEdit::canInsertFromMimeData(source);
 }
 
 void MarkdownEditor::dragEnterEvent(QDragEnterEvent *e)
@@ -772,6 +907,70 @@ void MarkdownEditor::dropEvent(QDropEvent *e)
         }
     } else {
         QPlainTextEdit::dropEvent(e);
+    }
+}
+
+void MarkdownEditor::insertFromMimeData(const QMimeData *source)
+{
+    Q_D(MarkdownEditor);
+
+    if (source->hasImage()) {
+        QImage image = qvariant_cast<QImage>(source->imageData());
+        QString imagePath, startingDirectory;
+
+        QString documentName = QFileInfo(d->textDocument->filePath()).baseName();
+        if (!d->textDocument->isNew()) {
+            startingDirectory = QFileInfo(d->textDocument->filePath()).dir().path();
+            imagePath = startingDirectory + "/" + documentName + "_";
+        } else {
+            imagePath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/";
+        }
+
+        imagePath += QDateTime::currentDateTime().toString("yyyyMMddhhmmsszzz") + ".png";
+
+        imagePath = QFileDialog::getSaveFileName(
+            this,
+            tr("Save Image"),
+            imagePath,
+            d->imageSaveFilter
+        );
+
+        if (!imagePath.isNull() && !imagePath.isEmpty()) {
+            // Write the image to the path selected by the user
+            QImageWriter writer;
+            writer.setFileName(imagePath);
+
+            if (!writer.write(image)) {
+                QMessageBox::critical(this,
+                    qApp->applicationName(),
+                    writer.errorString());
+                QPlainTextEdit::insertFromMimeData(source);
+                return;
+            }
+
+            QFileInfo imgInfo(imagePath);
+            bool isRelativePath = false;
+
+            if (imgInfo.exists()) {
+                if (!d->textDocument->isNew()) {
+                    QFileInfo docInfo(d->textDocument->filePath());
+
+                    if (docInfo.exists()) {
+                        imagePath = docInfo.dir().relativeFilePath(imagePath);
+                        isRelativePath = true;
+                    }
+                }
+            }
+
+            if (!isRelativePath) {
+                imagePath = QString("file://") + imagePath;
+            }
+
+            QTextCursor cursor = (this->textCursor());
+            cursor.insertText(QString("![](%1)").arg(imagePath));
+        }
+    } else {
+        QPlainTextEdit::insertFromMimeData(source);
     }
 }
 
@@ -1080,7 +1279,7 @@ void MarkdownEditor::indentText()
 
                 // Restart numbering for the nested list.
                 if (capture.size() == 2) {
-                    QRegularExpression numberRegex("\\d+");
+                    static QRegularExpression numberRegex("\\d+");
 
                     cursor.movePosition(QTextCursor::StartOfBlock);
                     cursor.movePosition
@@ -1304,6 +1503,49 @@ bool MarkdownEditor::toggleTaskComplete()
     return true;
 }
 
+void MarkdownEditor::insertImage()
+{
+    Q_D(MarkdownEditor);
+
+    QString startingDirectory = QString();
+    MarkdownDocument *document = (MarkdownDocument*) this->document();
+
+    if (!document->isNew()) {
+        startingDirectory = QFileInfo(document->filePath()).dir().path();
+    }
+
+    QString imagePath =
+        QFileDialog::getOpenFileName(
+            this,
+            tr("Insert Image"),
+            startingDirectory,
+            d->imageOpenFilter
+        );
+
+    if (!imagePath.isNull() && !imagePath.isEmpty()) {
+        QFileInfo imgInfo(imagePath);
+        bool isRelativePath = false;
+
+        if (imgInfo.exists()) {
+            if (!document->isNew()) {
+                QFileInfo docInfo(document->filePath());
+
+                if (docInfo.exists()) {
+                    imagePath = docInfo.dir().relativeFilePath(imagePath);
+                    isRelativePath = true;
+                }
+            }
+        }
+
+        if (!isRelativePath) {
+            imagePath = QString("file://") + imagePath;
+        }
+
+        QTextCursor cursor = this->textCursor();
+        cursor.insertText(QString("![](%1)").arg(imagePath));
+    }
+}
+
 void MarkdownEditor::setEnableLargeHeadingSizes(bool enable)
 {
     Q_D(MarkdownEditor);
@@ -1413,9 +1655,9 @@ void MarkdownEditor::onContentsChanged(int position, int charsAdded, int charsRe
 
     d->parseDocument();
 
-    // Don't use the textChanged() or contentsChanged() (no parameters) signals
+    // Don't use the textChanged() or contentsChanged() (no parameters) signals:
     // for checking if the typingResumed() signal needs to be emitted.  These
-    // two signals are emitted even when the text formatting changes (i.e.,
+    // two signals: are emitted even when the text formatting changes (i.e.,
     // when the QSyntaxHighlighter formats the text). Instead, use QTextDocument's
     // onContentsChanged(int, int, int) signal, which is only emitted when the
     // document text actually changes.
@@ -2021,7 +2263,7 @@ bool MarkdownEditorPrivate::handleWhitespaceInEmptyMatch(const QChar whitespace)
 
 void MarkdownEditorPrivate::insertFormattingMarkup(const MarkupType markupType)
 {
-    const QString& markup = Markup_Strings[markupType];
+    const QString& markup = MarkupStrings[markupType];
     // Get document text for testing toggles and so on
     const int mkp_len = markup.length();
 
@@ -2073,12 +2315,12 @@ void MarkdownEditorPrivate::insertFormattingMarkup(const MarkupType markupType)
             }
 
             for (int i = 0; i < MarkupType_Count; i++){
-                const QString& markup_test = Markup_Strings[i];
+                const QString& markup_test = MarkupStrings[i];
                 if (preceding_str == markup_test) preceding_markup_out = static_cast<MarkupType>(i);
                 if (succeeding_str == markup_test) succeeding_markup_out = static_cast<MarkupType>(i);
             }
         }
-        if (preceding_markup_out == succeeding_markup_out && preceding_markup_out != MarkupType_None) 
+        if (preceding_markup_out == succeeding_markup_out && preceding_markup_out != MarkupType_None)
             return true;
         return false;
     };
@@ -2142,12 +2384,12 @@ void MarkdownEditorPrivate::insertFormattingMarkup(const MarkupType markupType)
     } 
     // If no selection active, check if there are surrounding markup strings. If so, select the text within and toggle.
     else {
-        MarkupType preceding_existing_markup = MarkupType_None, succeeding_existing_markup = MarkupType_None;
-        detectMarkupTypes(cursor.position(), cursor.position(), preceding_existing_markup, succeeding_existing_markup);
+        MarkupType preceding_existing_markup = MarkupType_None, succeedingExistingMarkup = MarkupType_None;
+        detectMarkupTypes(cursor.position(), cursor.position(), preceding_existing_markup, succeedingExistingMarkup);
 
         // If both preceding and succeeding strings are the same markup and no text is selected, we're inside the middle, so just toggle.
         // E.g., **<cursor>**
-        if (preceding_existing_markup != MarkupType_None && preceding_existing_markup == succeeding_existing_markup) {
+        if (preceding_existing_markup != MarkupType_None && preceding_existing_markup == succeedingExistingMarkup) {
             toggleMarkupOfSelection();
             return;
         }
@@ -2156,7 +2398,7 @@ void MarkdownEditorPrivate::insertFormattingMarkup(const MarkupType markupType)
         // If "dont_select" is set to true, it will only check for the existence of the markup complement.
         const auto& selectTextWithinMarkupBoundary = [&](const bool reverse_search, const MarkupType found_markup_type, 
                     const bool break_at_space = false, const bool dont_select = false) -> bool {
-            const QString& existing_markup = Markup_Strings[found_markup_type];
+            const QString& existing_markup = MarkupStrings[found_markup_type];
 
             QTextCursor c_tmp = cursor;
             c_tmp.select(QTextCursor::BlockUnderCursor);
@@ -2218,7 +2460,7 @@ void MarkdownEditorPrivate::insertFormattingMarkup(const MarkupType markupType)
             return false;
         };
 
-        if (preceding_existing_markup != MarkupType_None){
+        if (preceding_existing_markup != MarkupType_None) {
             // Check if there is a space immediately after the markup. If so, select the text within.
             if (detectAdjacentSpace(false, 0, true) && selectTextWithinMarkupBoundary(true, preceding_existing_markup)) {
                 toggleMarkupOfSelection();
@@ -2226,39 +2468,39 @@ void MarkdownEditorPrivate::insertFormattingMarkup(const MarkupType markupType)
             }
             else{
                 // Try to toggle the other direction, if it exists.
-                cursor.setPosition(cursor.position() - Markup_Strings[preceding_existing_markup].length());
+                cursor.setPosition(cursor.position() - MarkupStrings[preceding_existing_markup].length());
                 if (selectTextWithinMarkupBoundary(false, preceding_existing_markup)){
                     toggleMarkupOfSelection();
                     return;
                 }
                 else
-                    cursor.setPosition(cursor.position() + Markup_Strings[preceding_existing_markup].length());
+                    cursor.setPosition(cursor.position() + MarkupStrings[preceding_existing_markup].length());
             }
         }
-        if (succeeding_existing_markup != MarkupType_None) {
+        if (succeedingExistingMarkup != MarkupType_None) {
             // If there is a space immediately before the markup, select the text within the proceeding markup block.
             if (detectAdjacentSpace(true)) {
-                if (selectTextWithinMarkupBoundary(false, succeeding_existing_markup)) {
+                if (selectTextWithinMarkupBoundary(false, succeedingExistingMarkup)) {
                     toggleMarkupOfSelection();
                     return;
                 }
             }
-            if (succeeding_existing_markup == markupType || 
-                succeeding_existing_markup == MarkupType_BoldItalic && markupType == MarkupType_Bold ||
-                succeeding_existing_markup == MarkupType_BoldItalic && markupType == MarkupType_Italic){
+            if ((succeedingExistingMarkup == markupType) ||
+                    ((succeedingExistingMarkup == MarkupType_BoldItalic) && (markupType == MarkupType_Bold)) ||
+                    ((succeedingExistingMarkup == MarkupType_BoldItalic) && (markupType == MarkupType_Italic))) {
                 // Move cursor beyond terminating markup string to "close" markup block.
-                cursor.setPosition(cursor.position() + Markup_Strings[succeeding_existing_markup].length());
-                q->setTextCursor(cursor);cursor.setPosition(cursor.position() + Markup_Strings[succeeding_existing_markup].length());
+                cursor.setPosition(cursor.position() + MarkupStrings[succeedingExistingMarkup].length());
+                q->setTextCursor(cursor);cursor.setPosition(cursor.position() + MarkupStrings[succeedingExistingMarkup].length());
                 return;
             }
             // If there is a space immediately after the detected markup, and it isn't the same, toggle it.
-            if (detectAdjacentSpace(false, Markup_Strings[succeeding_existing_markup].length(), true)) {
-                cursor.setPosition(cursor.position() + Markup_Strings[succeeding_existing_markup].length());
-                if (selectTextWithinMarkupBoundary(true, succeeding_existing_markup)) {
+            if (detectAdjacentSpace(false, MarkupStrings[succeedingExistingMarkup].length(), true)) {
+                cursor.setPosition(cursor.position() + MarkupStrings[succeedingExistingMarkup].length());
+                if (selectTextWithinMarkupBoundary(true, succeedingExistingMarkup)) {
                     toggleMarkupOfSelection();
                     return;
                 }
-                else cursor.setPosition(cursor.position() - Markup_Strings[succeeding_existing_markup].length());
+                else cursor.setPosition(cursor.position() - MarkupStrings[succeedingExistingMarkup].length());
             }
         }
 
@@ -2393,4 +2635,65 @@ bool MarkdownEditorPrivate::isCodeBlock(const QTextBlock &block) const
 {
     return (MarkdownStateCodeBlock == (MarkdownStateCodeBlock & block.userState()));
 }
+
+QStringList MarkdownEditorPrivate::buildImageReaderFormats()
+{
+    QStringList result;
+
+    QList<QByteArray> supportedFormats = QImageReader::supportedMimeTypes();
+
+    for (auto mimeType : webMimeTypes) {
+        if (supportedFormats.contains(mimeType.toLatin1())) {
+            result.append(mimeType);
+        }
+    }
+
+    // Since QImageReader::supportedMimeTypes does not return the SVG mime
+    // type even though Qt supports reading it and we have included that
+    // module to build, add it manually.
+    result.append(QStringLiteral("image/svg+xml"));
+
+    return result;
+}
+
+QStringList MarkdownEditorPrivate::buildImageWriterFormats()
+{
+    QStringList result;
+
+    QList<QByteArray> supportedFormats = QImageWriter::supportedMimeTypes();
+
+    for (auto mimeType : webMimeTypes) {
+        if (supportedFormats.contains(mimeType.toLatin1())) {
+            result.append(mimeType);
+        }
+    }
+
+    return result;
+}
+
+QString MarkdownEditorPrivate::buildImageFilters(
+    const QStringList &mimeTypes,
+    bool includeWildcardImages)
+{
+    QMimeDatabase db;
+    QString allFileExtensions = "";
+    QStringList filters;
+
+    for (const QString &mimeType : mimeTypes) {
+        QMimeType mime(db.mimeTypeForName(mimeType));
+        const QString patterns = mime.globPatterns().join(QLatin1Char(' '));
+        filters.append(mime.comment() + QLatin1String(" (") + patterns + QLatin1String(")"));
+
+        if (includeWildcardImages) {
+            allFileExtensions += patterns + QLatin1Char(' ');
+        }
+    }
+
+    if (includeWildcardImages) {
+        filters.insert(0, MarkdownEditor::tr("Images (%1)").arg(allFileExtensions.trimmed()));
+    }
+
+    return filters.join(";;");
+}
+
 } // namespace ghostwriter

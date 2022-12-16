@@ -1,21 +1,8 @@
-/***********************************************************************
+/*
+ * SPDX-FileCopyrightText: 2014-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2014-2021 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #include <QByteArray>
 #include <QDataStream>
@@ -123,7 +110,7 @@ QStringList ThemeRepository::availableThemes() const
     
     QStringList themeNames;
 
-    foreach (Theme theme, d->builtInThemes) {
+    for (Theme theme : d->builtInThemes) {
         themeNames.append(theme.name());
     }
 
@@ -361,7 +348,7 @@ void ThemeRepositoryPrivate::loadClassicTheme()
 {
     ColorScheme lightColors;
     lightColors.background = "#eff0f1";
-    lightColors.foreground = "#31363b";
+    lightColors.foreground = "#2d363a";
     lightColors.selection = "#93CEE9";
     lightColors.cursor = "#3DAEE9";
     lightColors.link = "#3DAEE9";
@@ -382,7 +369,7 @@ void ThemeRepositoryPrivate::loadClassicTheme()
     ColorScheme darkColors;
     darkColors.background = "#151719";
     darkColors.foreground = "#bdc3c7";
-    darkColors.selection = "#93CEE9";
+    darkColors.selection = "#074051";
     darkColors.cursor = "#3DAEE9";
     darkColors.link = "#3DAEE9";
     darkColors.headingText = "#bdc3c7";
@@ -415,7 +402,7 @@ void ThemeRepositoryPrivate::loadPlainstractionTheme()
 {
     ColorScheme lightColors;
     lightColors.background = "#ffffff";
-    lightColors.foreground = "#363c42";
+    lightColors.foreground = "#14191A";
     lightColors.selection = "#B8E3F0";
     lightColors.cursor = "#c23184";
     lightColors.link = "#c23184";

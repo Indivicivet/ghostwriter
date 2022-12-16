@@ -1,21 +1,8 @@
-﻿/***********************************************************************
+﻿/*
+ * SPDX-FileCopyrightText: 2020-2022 Megan Conkle <megan.conkle@kdemail.net>
  *
- * Copyright (C) 2020-2022 wereturtle
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ***********************************************************************/
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 #ifndef SIDEBAR_H
 #define SIDEBAR_H
@@ -54,27 +41,37 @@ public:
     ~Sidebar();
 
     /**
-     * Adds a new tab at the bottom of the tabs with the given button
+     * Adds a new tab at the bottom of the tabs with the given glyph icon
      * to represent it, and its corresponding widget to be displayed
      * when the tab is selected.
+     * 
+     * A QObject object name can be optionally specified if, for example, a
+     * different style needs to be applied to the tab (such as the font of the
+     * glyph icon) from the other tabs within the style sheet.
      */
-    void addTab
-    (
-        QPushButton *button,
-        QWidget *widget
+    void addTab(
+        const QChar &glyphIcon,
+        QWidget *widget,
+        const QString &tooltip = QString(),
+        const QString &objectName = QString()
     );
 
     /**
-     * Inserts a new tab at the given tab index with the given button
+     * Inserts a new tab at the given tab index with the given glyph icon
      * to represent it, and its corresponding widget to be displayed
      * when the tab is selected.  Valid tab index values are from zero
      * to tabCount().
+     * 
+     * A QObject object name can be optionally specified if, for example, a
+     * different style needs to be applied to the tab (such as the font of the
+     * glyph icon) from the other tabs within the style sheet.
      */
-    void insertTab
-    (
+    void insertTab(
         int index,
-        QPushButton *button,
-        QWidget *widget
+        const QChar &glyphIcon,
+        QWidget *widget,
+        const QString &tooltip = QString(),
+        const QString &objectName = QString()
     );
 
     /**
@@ -91,16 +88,36 @@ public:
     void setCurrentTabIndex(int index);
 
     /**
-     * Adds an action button at the bottom of the sidebar.
+     * Adds an action button with the given glyph icon at the bottom of the
+     * sidebar, and returns a pointer to the button so that connections can be
+     * made.  Note that ownership of the button belongs to the sidebar.
+     * 
+     * A QObject object name can be optionally specified if, for example, a
+     * different style needs to be applied to the button (such as the font of
+     * the glyph icon) from the other buttons within the style sheet.
      */
-    void addButton(QPushButton *button);
+    QPushButton *addButton(
+        const QChar &glyphIcon,
+        const QString &tooltip = QString(),
+        const QString &objectName = QString()
+    );
 
     /**
-     * Inserts an action button at the given button index in the button
-     * area of the bottom of the sidebar.  Valid button index values are
-     * from zero to buttonCount().
+     * Inserts an action button with the given glyph icon at the given index at
+     * the bottom of the sidebar, and returns a pointer to the button so that
+     * connections can be made.  Note that ownership of the button belongs to
+     * the sidebar.  Valid button index values are from zero to buttonCount().
+     * 
+     * A QObject object name can be optionally specified if, for example, a
+     * different style needs to be applied to the button (such as the font of
+     * the glyph icon) from the other buttons within the style sheet.
      */
-    void insertButton(int index, QPushButton *button);
+    QPushButton *insertButton(
+        int index,
+        const QChar &glyphIcon,
+        const QString &tooltip = QString(),
+        const QString &objectName = QString()
+    );
 
     /**
      * Removes the action button at the given button index from the button
@@ -140,8 +157,8 @@ protected slots:
     void onFocusChanged(QWidget *old, QWidget *now);
 
 protected:
-    void hideEvent(QHideEvent *event);
-    void showEvent(QShowEvent *event);
+    void hideEvent(QHideEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     QScopedPointer<SidebarPrivate> d_ptr;
